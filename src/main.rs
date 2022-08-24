@@ -2,8 +2,11 @@ use std::fs;
 
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
-use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy_egui::EguiPlugin;
+use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use serde::Deserialize;
+use bevy_egui::{egui, EguiContext};
+
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
 struct FixedUpdateStage;
@@ -11,7 +14,10 @@ struct FixedUpdateStage;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugin(WorldInspectorPlugin::new())
+        // .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(EguiPlugin)
+        .add_plugin(InspectorPlugin::<StarConfig>::new())
+        .add_system(ui_system)
         .insert_resource(ClearColor(Color::BLACK))
         // transform gizmo
         .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
@@ -48,7 +54,7 @@ fn main() {
 const GRAVITY_CONSTANT: f32 = 0.003;
 const DELTA_TIME: f64 = 0.01;
 
-#[derive(Reflect, Component, Default, Deserialize, Debug, Copy, Clone)]
+#[derive(Component, Default, Deserialize, Debug, Copy, Clone)]
 struct Mass(f32);
 #[derive(Reflect, Component, Default, Debug)]
 struct Acceleration(Vec3);
@@ -59,19 +65,22 @@ struct Star;
 #[derive(Component, Default)]
 struct CelestialBody;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Inspectable, Default)]
 struct StarConfig {
-    mass: Mass,
+    #[inspectable(min=100.0, max=10.0e5)]
+    mass: f32,
+    #[inspectable(min=0.001, max=100.0)]
     radius: f32,
-    velocity: [f32; 3],
-    pos: [f32; 3],
+    velocity: Vec3,
+    pos: Vec3,
     color: [u8; 3],
     star: Option<bool>,
 }
 
+
 impl StarConfig {
     fn get_last_pos(&self) -> LastPos {
-        LastPos(Vec3::from(self.pos) - (DELTA_TIME as f32) * Vec3::from(self.velocity))
+        LastPos(self.pos - (DELTA_TIME as f32) * self.velocity)
     }
 
     fn spawn(
@@ -80,7 +89,7 @@ impl StarConfig {
         materials: &mut ResMut<Assets<StandardMaterial>>,
         commands: &mut Commands,
     ) {
-        let [r, g, b] = self.color;
+        let [r, g, b]: [u8; 3] = self.color.clone().try_into().unwrap();
         let color = Color::rgb_u8(r, g, b);
         let bundle = BodyBundle { 
             pbr: PbrBundle {
@@ -93,7 +102,7 @@ impl StarConfig {
                 material: materials.add(color.into()),
                 ..default()
             },
-            mass: self.mass,
+            mass: Mass(self.mass),
             acceleration: Acceleration(Vec3::ZERO),
             last_pos: self.get_last_pos(),
             ..default()
@@ -133,6 +142,28 @@ impl StarConfig {
     }
 }
 
+fn ui_system(
+    mut egui_context: ResMut<EguiContext>, 
+    new_planet: ResMut<StarConfig>,
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+
+    let mesh = meshes.add(Mesh::from(shape::Icosphere {
+        radius: 1.0,
+        subdivisions: 3,
+    }));
+
+    egui::Window::new(" ").show(egui_context.ctx_mut(), |ui| {
+        if ui.button("Spawn new planet").clicked() {
+            new_planet.spawn(mesh, &mut materials, &mut commands);
+            // *new_planet = StarConfig::default();
+            // commands.spawn_bundle(new_planet.) 
+        };
+    });
+}
+
 
 #[derive(Bundle, Default)]
 struct BodyBundle {
@@ -169,10 +200,8 @@ fn update_setup(
         subdivisions: 3,
     }));
 
-    println!("before: {}", planets.is_empty());
     planets.for_each(|entity| commands.entity(entity).despawn());
 
-    println!("after: {}", planets.is_empty());
     let result = serde_json::from_str::<Vec<StarConfig>>(&config);
     if let Ok(celestial_bodies) = &result {
         for celestial_body in celestial_bodies {
@@ -195,64 +224,6 @@ fn setup(
     })
         .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
         .insert(bevy_transform_gizmo::GizmoPickSource::default());
-
-    // let position = Vec3::new(4.0, 0., 0.);
-    // let radius = 0.7;
-    // let mesh = meshes.add(Mesh::from(shape::Icosphere {
-    //     radius: 1.0,
-    //     subdivisions: 3,
-    // }));
-    //
-    // commands.spawn_bundle(BodyBundle { 
-    //     pbr: PbrBundle {
-    //         transform: Transform {
-    //             translation: position,
-    //             scale: Vec3::splat(radius),
-    //             ..default()
-    //         },
-    //         mesh: mesh.clone(),
-    //         material: materials.add(Color::PURPLE.into()),
-    //         ..default()
-    //     },
-    //     mass: Mass(0.7f32.powi(3) * 10.),
-    //     acceleration: Acceleration(Vec3::ZERO),
-    //     last_pos: LastPos( position + 0.004),
-    //     ..default()
-    // });
-    //
-    // // add bigger "star" body in the center
-    // let star_radius = 1.;
-    // commands
-    //     .spawn_bundle(BodyBundle {
-    //         pbr: PbrBundle {
-    //             transform: Transform::from_scale(Vec3::splat(star_radius)),
-    //             mesh: meshes.add(Mesh::from(shape::Icosphere {
-    //                 radius: 1.0,
-    //                 subdivisions: 5,
-    //             })),
-    //             material: materials.add(StandardMaterial {
-    //                 base_color: Color::ORANGE_RED,
-    //                 emissive: (Color::ORANGE_RED * 2.),
-    //                 ..default()
-    //             }),
-    //             ..default()
-    //         },
-    //         mass: Mass(500.0),
-    //         ..default()
-    //     })
-    //     .insert(Star)
-    //     .with_children(|p| {
-    //         p.spawn_bundle(PointLightBundle {
-    //             point_light: PointLight {
-    //                 color: Color::WHITE,
-    //                 intensity: 400.0,
-    //                 range: 100.0,
-    //                 radius: star_radius,
-    //                 ..default()
-    //             },
-    //             ..default()
-    //         });
-    //     });
 }
 
 fn interact_bodies(mut query: Query<(&Mass, &GlobalTransform, &mut Acceleration)>) {
