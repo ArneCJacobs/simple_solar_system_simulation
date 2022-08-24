@@ -36,10 +36,10 @@ fn main() {
         .add_stage_after(
             CoreStage::Update,
             FixedUpdateStage,
-            SystemStage::parallel()
+            SystemStage::single_threaded()
                 .with_run_criteria(FixedTimestep::step(DELTA_TIME))
                 .with_system(interact_bodies)
-                .with_system(integrate),
+                .with_system(integrate.after(interact_bodies)),
         )
         .run();
 
@@ -57,7 +57,7 @@ fn main() {
     // }
 }
 const GRAVITY_CONSTANT: f32 = 0.003;
-const DELTA_TIME: f64 = 0.01;
+const DELTA_TIME: f64 = 0.005;
 
 #[derive(Component, Default, Deserialize, Debug, Copy, Clone)]
 struct Mass(f32);
@@ -260,24 +260,49 @@ fn setup(
 }
 
 fn interact_bodies(
-    mut query: Query<(&Mass, &GlobalTransform, &mut Acceleration)>,
+    mut query: Query<(Entity, &Mass, &GlobalTransform, &mut Acceleration)>,
     settings: Res<Settings>,
 ) {
     if !settings.play {
         return;
     }
 
-    let mut iter = query.iter_combinations_mut();
-    while let Some(
-        [
-            (m1, transform1, mut acc1), 
-            (m2, transform2, mut acc2)
-        ]) = iter.fetch_next() {
-        newtonian_gravity(
-            &m1, &transform1.translation(), &mut acc1, 
-            &m2, &transform2.translation(), &mut acc2
-        );
+    let mut system = Vec::new();
+    for entity in &query {
+        system.push(entity.0.clone());
     }
+
+    // could be done more elegantly with iter_combinations_mut but this method is choosen to be as similar as possible to the estimate_paths function
+    for index1 in 0..system.len() {
+        for index2 in 0..index1 {
+            // if index1 == index2 {
+            //     continue;
+            // }
+            let s1 = query.get(system[index1]).unwrap(); 
+            let s2 = query.get(system[index2]).unwrap(); 
+            let mut acc1 = s1.3.clone();
+            let mut acc2 = s2.3.clone();
+            newtonian_gravity(
+                &s1.1, &s1.2.translation(), &mut acc1, 
+                &s2.1, &s2.2.translation(), &mut acc2
+            );
+            query.get_mut(system[index1]).unwrap().3.0 = acc1.0;
+            query.get_mut(system[index2]).unwrap().3.0 = acc2.0;
+        }
+    }
+
+
+    // let mut iter = query.iter_combinations_mut();
+    // while let Some(
+    //     [
+    //         (m1, transform1, mut acc1), 
+    //         (m2, transform2, mut acc2)
+    //     ]) = iter.fetch_next() {
+    //     newtonian_gravity(
+    //         &m1, &transform1.translation(), &mut acc1, 
+    //         &m2, &transform2.translation(), &mut acc2
+    //     );
+    // }
 }
 
 fn newtonian_gravity(
@@ -357,9 +382,9 @@ fn estimate_paths(
     for i in 0..(settings.trail_length * settings.trail_interval) {
         for index1 in 0..system.len() {
             for index2 in 0..index1 {
-                if index1 == index2 {
-                    continue;
-                }
+                // if index1 == index2 {
+                //     continue;
+                // }
                 let s1 = &system[index1]; 
                 let s2 = &system[index2]; 
                 let mut acc1 = s1.acc.clone();
@@ -386,8 +411,8 @@ fn estimate_paths(
                 s.pos, 
                 s.vel.0
             );
-            s.pos = new_pos;
             s.prev_acc.0 = s.acc.0;
+            s.pos = new_pos;
             s.acc.0 = new_acc;
             s.vel.0 = new_vel;
 
@@ -430,8 +455,8 @@ fn velocity_verlet(
     velocity: Vec3,
 ) -> (Vec3, Vec3, Vec3) {
     let new_pos = pos + velocity * dt + acceleration * (dt_sq * 0.5);
-    let new_acc = Vec3::ZERO;
     let new_vel = velocity + (acceleration + prev_acceleration) * (dt * 0.5);
+    let new_acc = Vec3::ZERO;
 
     return (new_pos, new_vel, new_acc);
 }
