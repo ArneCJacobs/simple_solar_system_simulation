@@ -56,7 +56,7 @@ fn main() {
     //     t += h;
     // }
 }
-const GRAVITY_CONSTANT: f32 = 0.003;
+const GRAVITY_CONSTANT: f32 = 0.03;
 const DELTA_TIME: f64 = 0.005;
 
 #[derive(Component, Default, Deserialize, Debug, Copy, Clone)]
@@ -165,8 +165,8 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             play: false,
-            trail_length: 500,
-            trail_interval: 10,
+            trail_length: 10_00,
+            trail_interval: 20,
         }
     }
 }
