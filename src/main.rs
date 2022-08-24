@@ -6,6 +6,7 @@ use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use serde::Deserialize;
 use bevy_egui::{egui, EguiContext};
+use bevy_prototype_debug_lines::*;
 
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
@@ -15,11 +16,11 @@ fn main() {
     App::new()
         .add_startup_system(setup)
         .add_plugins(DefaultPlugins)
+        .add_plugin(DebugLinesPlugin::with_depth_test(true))
         // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(EguiPlugin)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
         .add_plugin(InspectorPlugin::<Settings>::new())
-        .add_system(ui_system)
         .insert_resource(ClearColor(Color::BLACK))
         // transform gizmo
         .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
@@ -28,7 +29,10 @@ fn main() {
             brightness: 0.03,
             ..default()
         })
-        .add_system(update_setup)
+        .add_system(ui_system)
+        .add_startup_system(update_setup)
+        .add_system(estimate_paths)
+        .add_system(draw_paths)
         .add_stage_after(
             CoreStage::Update,
             FixedUpdateStage,
@@ -57,16 +61,20 @@ const DELTA_TIME: f64 = 0.01;
 
 #[derive(Component, Default, Deserialize, Debug, Copy, Clone)]
 struct Mass(f32);
-#[derive(Reflect, Component, Default, Debug)]
+#[derive(Reflect, Component, Default, Debug, Clone)]
 struct Acceleration(Vec3);
-#[derive(Reflect, Component, Default, Debug)]
+#[derive(Reflect, Component, Default, Debug, Clone)]
 struct PrevAcceleration(Vec3);
-#[derive(Reflect, Component, Default, Debug)]
+#[derive(Reflect, Component, Default, Debug, Clone)]
 struct Velocity(Vec3);
 #[derive(Reflect, Component)]
 struct Star;
 #[derive(Component, Default)]
 struct CelestialBody;
+#[derive(Component, Default, Clone)]
+struct PredictedPath {
+    pos_vec: Vec<Vec3>
+}
 
 #[derive(Deserialize, Debug, Inspectable, Default)]
 struct StarConfig {
@@ -144,9 +152,23 @@ impl StarConfig {
 
 
 
-#[derive(Default, Inspectable)]
+#[derive(Inspectable)]
 struct Settings {
     play: bool,
+    #[inspectable(min = 1)]
+    trail_length: u64,
+    #[inspectable(min = 1)]
+    trail_interval: u64,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            play: false,
+            trail_length: 500,
+            trail_interval: 10,
+        }
+    }
 }
 
 
@@ -182,6 +204,7 @@ struct BodyBundle {
     acceleration: Acceleration,
     prev_acceleration: PrevAcceleration,
     celestial_body: CelestialBody,
+    predicted_path: PredictedPath,
 }
 
 #[derive(Default)]
@@ -247,18 +270,29 @@ fn interact_bodies(
     let mut iter = query.iter_combinations_mut();
     while let Some(
         [
-            (Mass(m1), transform1, mut acc1), 
-            (Mass(m2), transform2, mut acc2)
+            (m1, transform1, mut acc1), 
+            (m2, transform2, mut acc2)
         ]) = iter.fetch_next() {
-        let delta = transform2.translation() - transform1.translation();
-        let distance_sq: f32 = delta.length_squared();
-
-        let f = GRAVITY_CONSTANT / distance_sq;
-        let force_unit_mass = delta * f;
-
-        acc1.0 += force_unit_mass * (*m2);
-        acc2.0 -= force_unit_mass * (*m1);
+        newtonian_gravity(
+            &m1, &transform1.translation(), &mut acc1, 
+            &m2, &transform2.translation(), &mut acc2
+        );
     }
+}
+
+fn newtonian_gravity(
+    Mass(m1): &Mass, &pos1: &Vec3, acc1: &mut Acceleration,
+    Mass(m2): &Mass, &pos2: &Vec3, acc2: &mut Acceleration,
+) {
+    let delta = pos2 - pos1;
+    let distance_sq: f32 = delta.length_squared();
+
+    let f = GRAVITY_CONSTANT / distance_sq;
+    let force_unit_mass = delta * f;
+
+    acc1.0 += force_unit_mass * (*m2);
+    acc2.0 -= force_unit_mass * (*m1);
+
 }
 
 fn integrate(
@@ -271,16 +305,131 @@ fn integrate(
     let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
     let dt = DELTA_TIME as f32;
     for(mut acceleration, mut prev_acceleration, mut transform, mut velocity) in &mut query {
-        let new_pos = transform.translation + velocity.0 * dt + acceleration.0 * (dt_sq * 0.5);
-        let new_acc = Vec3::ZERO;
-        let new_vel = velocity.0 + (acceleration.0 + prev_acceleration.0) * (dt * 0.5);
+        // let new_pos = transform.translation + velocity.0 * dt + acceleration.0 * (dt_sq * 0.5);
+        // let new_acc = Vec3::ZERO;
+        // let new_vel = velocity.0 + (acceleration.0 + prev_acceleration.0) * (dt * 0.5);
 
         prev_acceleration.0 = acceleration.0;
+        let (new_pos, new_vel, new_acc) = velocity_verlet(
+            dt, 
+            dt_sq, 
+            acceleration.0, 
+            prev_acceleration.0, 
+            transform.translation, 
+            velocity.0
+        );
         transform.translation = new_pos;
         acceleration.0 = new_acc;
         velocity.0 = new_vel;
     }
+}
 
+struct System {
+    entity: Entity,
+    mass: Mass,
+    acc: Acceleration, 
+    prev_acc: PrevAcceleration,
+    pos: Vec3, 
+    vel: Velocity, 
+    path: PredictedPath,
+}
+
+fn estimate_paths(
+    mut query: Query<(Entity, &Mass, &Acceleration, &PrevAcceleration, &Transform, &Velocity, &mut PredictedPath)>, 
+    settings: Res<Settings>,
+) {
+    if settings.play {
+        return;
+    }
+    let mut system: Vec<System> = vec![];
+    for(entity, mass, acceleration, prev_acceleration, transform, velocity, mut path) in &mut query {
+        path.pos_vec.clear();
+
+        system.push(System {
+            entity,
+            mass: mass.clone(),
+            pos: transform.translation.clone(),
+            vel: velocity.clone(),
+            acc: acceleration.clone(),
+            prev_acc: prev_acceleration.clone(),
+            path: PredictedPath{ pos_vec: vec![] },
+        });
+    }
+
+    for i in 0..(settings.trail_length * settings.trail_interval) {
+        // update accelration
+        for index1 in 0..system.len() {
+            for index2 in 0..system.len() {
+                if index1 == index2 {
+                    continue;
+                }
+                let s1 = &system[index1]; 
+                let s2 = &system[index2]; 
+                let mut acc1 = s1.acc.clone();
+                let mut acc2 = s2.acc.clone();
+                newtonian_gravity(
+                    &s1.mass, &s1.pos, &mut acc1, 
+                    &s2.mass, &s2.pos, &mut acc2
+                );
+                system.get_mut(index1).unwrap().acc = acc1;
+                system.get_mut(index2).unwrap().acc = acc2;
+            }
+        }
+
+        // update pos, vel
+
+        let dt = DELTA_TIME as f32;
+        let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
+        for s in &mut system {
+            let (new_pos, new_vel, new_acc) = velocity_verlet(dt, dt_sq, s.acc.0, s.prev_acc.0, s.pos, s.vel.0);
+            s.pos = new_pos;
+            s.prev_acc = PrevAcceleration(s.acc.0);
+            s.acc = Acceleration(new_acc);
+            s.vel = Velocity(new_vel);
+
+
+            if (i % settings.trail_interval) == 0 {
+                s.path.pos_vec.push(new_pos);
+            } 
+        }
+    }
+
+    for s in &system {
+        let (_, _, _, _, _, _, mut path) = query.get_mut(s.entity).unwrap();
+        path.pos_vec.clone_from(&s.path.pos_vec);
+    }
+
+}
+
+fn draw_paths(
+    mut lines: ResMut<DebugLines>,
+    query: Query<&PredictedPath>,
+) {
+    for path in &query {
+        for i in 1..path.pos_vec.len() {
+            lines.line(
+                path.pos_vec[i-1],
+                path.pos_vec[i],
+                0.
+            );
+        } 
+    }
+
+}
+
+fn velocity_verlet(
+    dt: f32,
+    dt_sq: f32,
+    acceleration: Vec3,
+    prev_acceleration: Vec3,
+    pos: Vec3,
+    velocity: Vec3,
+) -> (Vec3, Vec3, Vec3) {
+    let new_pos = pos + velocity * dt + acceleration * (dt_sq * 0.5);
+    let new_acc = Vec3::ZERO;
+    let new_vel = velocity + (acceleration + prev_acceleration) * (dt * 0.5);
+
+    return (new_pos, new_vel, new_acc);
 }
 
 // fn runge_kutta_4<F>(f: F, h: f32, x0: f32, y0: f32) -> f32

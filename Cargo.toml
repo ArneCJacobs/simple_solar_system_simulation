@@ -13,6 +13,8 @@ bevy_mod_picking = "0.8.2"
 bevy_transform_gizmo = "0.3.1"
 serde = "1.0.144"
 serde_json = "1.0.85"
+bevy_prototype_debug_lines = { version = "0.8", features = ["3d"] }
+itertools = "0.10.3"
 
 
 # Enable a small amount of optimization in debug mode
