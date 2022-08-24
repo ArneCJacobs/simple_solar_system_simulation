@@ -13,10 +13,12 @@ struct FixedUpdateStage;
 
 fn main() {
     App::new()
+        .add_startup_system(setup)
         .add_plugins(DefaultPlugins)
         // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(EguiPlugin)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
+        .add_plugin(InspectorPlugin::<Settings>::new())
         .add_system(ui_system)
         .insert_resource(ClearColor(Color::BLACK))
         // transform gizmo
@@ -26,7 +28,6 @@ fn main() {
             brightness: 0.03,
             ..default()
         })
-        .add_startup_system(setup)
         .add_system(update_setup)
         .add_stage_after(
             CoreStage::Update,
@@ -59,7 +60,9 @@ struct Mass(f32);
 #[derive(Reflect, Component, Default, Debug)]
 struct Acceleration(Vec3);
 #[derive(Reflect, Component, Default, Debug)]
-struct LastPos(Vec3);
+struct PrevAcceleration(Vec3);
+#[derive(Reflect, Component, Default, Debug)]
+struct Velocity(Vec3);
 #[derive(Reflect, Component)]
 struct Star;
 #[derive(Component, Default)]
@@ -79,10 +82,6 @@ struct StarConfig {
 
 
 impl StarConfig {
-    fn get_last_pos(&self) -> LastPos {
-        LastPos(self.pos - (DELTA_TIME as f32) * self.velocity)
-    }
-
     fn spawn(
         &self, 
         mesh: Handle<Mesh>, 
@@ -104,7 +103,8 @@ impl StarConfig {
             },
             mass: Mass(self.mass),
             acceleration: Acceleration(Vec3::ZERO),
-            last_pos: self.get_last_pos(),
+            prev_acceleration: PrevAcceleration(Vec3::ZERO),
+            velocity: Velocity(self.velocity),
             ..default()
         }; 
 
@@ -142,6 +142,14 @@ impl StarConfig {
     }
 }
 
+
+
+#[derive(Default, Inspectable)]
+struct Settings {
+    play: bool,
+}
+
+
 fn ui_system(
     mut egui_context: ResMut<EguiContext>, 
     new_planet: ResMut<StarConfig>,
@@ -170,8 +178,9 @@ struct BodyBundle {
     #[bundle]
     pbr: PbrBundle,
     mass: Mass,
-    last_pos: LastPos,
+    velocity: Velocity,
     acceleration: Acceleration,
+    prev_acceleration: PrevAcceleration,
     celestial_body: CelestialBody,
 }
 
@@ -224,28 +233,52 @@ fn setup(
     })
         .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
         .insert(bevy_transform_gizmo::GizmoPickSource::default());
+
 }
 
-fn interact_bodies(mut query: Query<(&Mass, &GlobalTransform, &mut Acceleration)>) {
+fn interact_bodies(
+    mut query: Query<(&Mass, &GlobalTransform, &mut Acceleration)>,
+    settings: Res<Settings>,
+) {
+    if !settings.play {
+        return;
+    }
+
     let mut iter = query.iter_combinations_mut();
-    while let Some([(Mass(m1), transform1, mut acc1), (Mass(m2), transform2, mut acc2)]) = iter.fetch_next() {
+    while let Some(
+        [
+            (Mass(m1), transform1, mut acc1), 
+            (Mass(m2), transform2, mut acc2)
+        ]) = iter.fetch_next() {
         let delta = transform2.translation() - transform1.translation();
         let distance_sq: f32 = delta.length_squared();
 
         let f = GRAVITY_CONSTANT / distance_sq;
         let force_unit_mass = delta * f;
+
         acc1.0 += force_unit_mass * (*m2);
         acc2.0 -= force_unit_mass * (*m1);
     }
 }
 
-fn integrate(mut query: Query<(&mut Acceleration, &mut Transform, &mut LastPos)>) {
+fn integrate(
+    mut query: Query<(&mut Acceleration, &mut PrevAcceleration, &mut Transform, &mut Velocity)>, 
+    settings: Res<Settings>,
+) {
+    if !settings.play {
+        return;
+    }
     let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
-    for(mut acceleration, mut transform, mut last_pos) in &mut query {
-        let new_pos = 2.0 * transform.translation - last_pos.0 + acceleration.0 * dt_sq;
-        acceleration.0 = Vec3::ZERO;
-        last_pos.0 = transform.translation;
+    let dt = DELTA_TIME as f32;
+    for(mut acceleration, mut prev_acceleration, mut transform, mut velocity) in &mut query {
+        let new_pos = transform.translation + velocity.0 * dt + acceleration.0 * (dt_sq * 0.5);
+        let new_acc = Vec3::ZERO;
+        let new_vel = velocity.0 + (acceleration.0 + prev_acceleration.0) * (dt * 0.5);
+
+        prev_acceleration.0 = acceleration.0;
         transform.translation = new_pos;
+        acceleration.0 = new_acc;
+        velocity.0 = new_vel;
     }
 
 }
