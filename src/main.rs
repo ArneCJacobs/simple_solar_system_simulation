@@ -2,6 +2,7 @@ use std::fs;
 
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
+use bevy_inspector_egui::WorldInspectorPlugin;
 use serde::Deserialize;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
@@ -10,7 +11,11 @@ struct FixedUpdateStage;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugin(WorldInspectorPlugin::new())
         .insert_resource(ClearColor(Color::BLACK))
+        // transform gizmo
+        .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
+        .add_plugin(bevy_transform_gizmo::TransformGizmoPlugin::default())
         .insert_resource(AmbientLight {
             brightness: 0.03,
             ..default()
@@ -43,13 +48,13 @@ fn main() {
 const GRAVITY_CONSTANT: f32 = 0.003;
 const DELTA_TIME: f64 = 0.01;
 
-#[derive(Component, Default, Deserialize, Debug, Copy, Clone)]
+#[derive(Reflect, Component, Default, Deserialize, Debug, Copy, Clone)]
 struct Mass(f32);
-#[derive(Component, Default, Debug)]
+#[derive(Reflect, Component, Default, Debug)]
 struct Acceleration(Vec3);
-#[derive(Component, Default, Debug)]
+#[derive(Reflect, Component, Default, Debug)]
 struct LastPos(Vec3);
-#[derive(Component)]
+#[derive(Reflect, Component)]
 struct Star;
 #[derive(Component, Default)]
 struct CelestialBody;
@@ -95,6 +100,10 @@ impl StarConfig {
         }; 
 
         let mut command = commands.spawn_bundle(bundle);
+
+        command
+            .insert_bundle(bevy_mod_picking::PickableBundle::default())
+            .insert(bevy_transform_gizmo::GizmoTransformable);
 
         if self.star.unwrap_or(false) {
 
@@ -183,7 +192,9 @@ fn setup(
     commands.spawn_bundle(Camera3dBundle {
         transform: Transform::from_xyz(0.0, 10.5, -30.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
-    });
+    })
+        .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
+        .insert(bevy_transform_gizmo::GizmoPickSource::default());
 
     // let position = Vec3::new(4.0, 0., 0.);
     // let radius = 0.7;
@@ -260,7 +271,6 @@ fn interact_bodies(mut query: Query<(&Mass, &GlobalTransform, &mut Acceleration)
 fn integrate(mut query: Query<(&mut Acceleration, &mut Transform, &mut LastPos)>) {
     let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
     for(mut acceleration, mut transform, mut last_pos) in &mut query {
-        println!("{:?}, {:?}, {:?}", transform.translation, acceleration, last_pos);
         let new_pos = 2.0 * transform.translation - last_pos.0 + acceleration.0 * dt_sq;
         acceleration.0 = Vec3::ZERO;
         last_pos.0 = transform.translation;
