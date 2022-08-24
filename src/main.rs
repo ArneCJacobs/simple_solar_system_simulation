@@ -309,7 +309,6 @@ fn integrate(
         // let new_acc = Vec3::ZERO;
         // let new_vel = velocity.0 + (acceleration.0 + prev_acceleration.0) * (dt * 0.5);
 
-        prev_acceleration.0 = acceleration.0;
         let (new_pos, new_vel, new_acc) = velocity_verlet(
             dt, 
             dt_sq, 
@@ -318,6 +317,8 @@ fn integrate(
             transform.translation, 
             velocity.0
         );
+
+        prev_acceleration.0 = acceleration.0;
         transform.translation = new_pos;
         acceleration.0 = new_acc;
         velocity.0 = new_vel;
@@ -338,9 +339,6 @@ fn estimate_paths(
     mut query: Query<(Entity, &Mass, &Acceleration, &PrevAcceleration, &Transform, &Velocity, &mut PredictedPath)>, 
     settings: Res<Settings>,
 ) {
-    if settings.play {
-        return;
-    }
     let mut system: Vec<System> = vec![];
     for(entity, mass, acceleration, prev_acceleration, transform, velocity, mut path) in &mut query {
         path.pos_vec.clear();
@@ -357,9 +355,8 @@ fn estimate_paths(
     }
 
     for i in 0..(settings.trail_length * settings.trail_interval) {
-        // update accelration
         for index1 in 0..system.len() {
-            for index2 in 0..system.len() {
+            for index2 in 0..index1 {
                 if index1 == index2 {
                     continue;
                 }
@@ -381,11 +378,18 @@ fn estimate_paths(
         let dt = DELTA_TIME as f32;
         let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
         for s in &mut system {
-            let (new_pos, new_vel, new_acc) = velocity_verlet(dt, dt_sq, s.acc.0, s.prev_acc.0, s.pos, s.vel.0);
+            let (new_pos, new_vel, new_acc) = velocity_verlet(
+                dt, 
+                dt_sq, 
+                s.acc.0, 
+                s.prev_acc.0, 
+                s.pos, 
+                s.vel.0
+            );
             s.pos = new_pos;
-            s.prev_acc = PrevAcceleration(s.acc.0);
-            s.acc = Acceleration(new_acc);
-            s.vel = Velocity(new_vel);
+            s.prev_acc.0 = s.acc.0;
+            s.acc.0 = new_acc;
+            s.vel.0 = new_vel;
 
 
             if (i % settings.trail_interval) == 0 {
