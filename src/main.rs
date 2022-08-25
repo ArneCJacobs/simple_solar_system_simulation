@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, env};
 
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
@@ -217,7 +217,8 @@ fn update_setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
-    let config = fs::read_to_string("setup.json") // TODO configurable path
+    let args: Vec<String> = env::args().collect();
+    let config = fs::read_to_string(args.get(1).expect("Please give a file with the initial conditions")) // TODO configurable path
         .expect("Could not read file");
 
 
