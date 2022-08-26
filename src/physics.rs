@@ -107,16 +107,14 @@ pub fn integrate(
     if !settings.play {
         return;
     }
-    let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
     let dt = DELTA_TIME as f32;
     for(mut acceleration, mut prev_acceleration, mut transform, mut velocity) in &mut query {
         // let new_pos = transform.translation + velocity.0 * dt + acceleration.0 * (dt_sq * 0.5);
         // let new_acc = Vec3::ZERO;
         // let new_vel = velocity.0 + (acceleration.0 + prev_acceleration.0) * (dt * 0.5);
 
-        let (new_pos, new_vel, new_acc) = velocity_verlet(
+        let (new_pos, new_vel) = velocity_verlet(
             dt,
-            dt_sq,
             acceleration.0,
             prev_acceleration.0,
             transform.translation,
@@ -125,7 +123,7 @@ pub fn integrate(
 
         prev_acceleration.0 = acceleration.0;
         transform.translation = new_pos;
-        acceleration.0 = new_acc;
+        acceleration.0 = Vec3::ZERO;
         velocity.0 = new_vel;
     }
 }
@@ -171,11 +169,9 @@ pub fn estimate_paths(
         // update pos, vel
 
         let dt = DELTA_TIME as f32;
-        let dt_sq = (DELTA_TIME * DELTA_TIME) as f32;
         for s in &mut system {
-            let (new_pos, new_vel, new_acc) = velocity_verlet(
+            let (new_pos, new_vel) = velocity_verlet(
                 dt,
-                dt_sq,
                 s.acc.0,
                 s.prev_acc.0,
                 s.pos,
@@ -183,7 +179,7 @@ pub fn estimate_paths(
             );
             s.prev_acc.0 = s.acc.0;
             s.pos = new_pos;
-            s.acc.0 = new_acc;
+            s.acc.0 = Vec3::ZERO;
             s.vel.0 = new_vel;
 
 
@@ -202,36 +198,57 @@ pub fn estimate_paths(
 
 fn velocity_verlet(
     dt: f32,
-    dt_sq: f32,
     acceleration: Vec3,
     prev_acceleration: Vec3,
     pos: Vec3,
     velocity: Vec3,
-) -> (Vec3, Vec3, Vec3) {
+) -> (Vec3, Vec3) {
+    let dt_sq = dt*dt;
     let new_pos = pos + velocity * dt + acceleration * (dt_sq * 0.5);
     let new_vel = velocity + (acceleration + prev_acceleration) * (dt * 0.5);
-    let new_acc = Vec3::ZERO;
 
-    return (new_pos, new_vel, new_acc);
+    return (new_pos, new_vel);
 }
 
-fn runge_kutta_4_nystttrom<F, Num, Fl>(
+fn runge_kutta_4_nystorm<F, Num>
+(
     f: F,
-    dt: f32,
-    acceleration: Num,
-    prev_acceleration: Num,
-    pos: Num,
-    velocity: Num,
-) -> f32
+    h: f32,
+    t0: Num,
+    y0: Num,
+    dy0: Num,
+) -> (Num, Num)
 where 
-    Num: Mul<f32> + Add<Num>,
-    F: Fn(Num, Num, Num) -> Num
+    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
+    F: Fn(Num, Num, Num) -> Num,
 {
-    todo!();    
+    let k1 = f(t0, dy0, y0);
+
+    let dy1 = dy0 + k1 * (h * 0.5); 
+    let y1 = y0 + ((dy0 + dy1) * 0.5) * (h * 0.5);
+    let k2 = f(t0 + h * 0.5, dy1, y1);
+
+    let dy2 = dy0 + dy0 * (h * 0.5);
+    let y2 = y0 + (dy0 + dy2) * 0.5 * (h * 0.5); 
+    let k3 = f(t0 + h * 0.5, dy2, y2);
+
+    let dy3 = dy0 + k3 * h;
+    let y3 = y0 + (dy0 + dy3) * (h * 0.5);
+    let k4 = f(t0 + h, dy3, y3);
+
+    let dy = dy0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
+    let y = y0 + (dy1 + dy2 * 2.0 + dy3 * 2.0 + y3) * (h / 6.0);
+
+    (dy, y)
 }
 
 #[allow(dead_code)]
-fn runge_kutta_4<F, Num>(f: F, h: f32, x0: Num, y0: Num) -> Num
+fn runge_kutta_4<F, Num>(
+    f: F, 
+    h: f32, 
+    x0: Num, 
+    y0: Num
+) -> Num
 where
     Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
     F: Fn(Num, Num) -> Num,
