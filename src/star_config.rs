@@ -1,6 +1,8 @@
 use bevy_inspector_egui::Inspectable;
-use crate::{Acceleration, Assets, BodyBundle, BuildChildren, Color, Commands, default, Handle, Mass, Mesh, PbrBundle, PointLight, PointLightBundle, PrevAcceleration, ResMut, StandardMaterial, Star, Transform, Vec3, Velocity};
+use bevy::prelude::*;
 use serde::Deserialize;
+use crate::physics::{Acceleration, Mass, Star, Velocity, PrevAcceleration};
+use crate::BodyBundle;
 
 #[derive(Deserialize, Debug, Inspectable, Default)]
 pub struct StarConfig {
