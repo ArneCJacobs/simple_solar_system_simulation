@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 use std::{env, fs};
 
 use bevy::prelude::*;
@@ -6,7 +8,7 @@ use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
-use physics::{CelestialBody, Acceleration, DELTA_TIME, Mass, PredictedPath, Velocity, PrevAcceleration};
+use physics::{DELTA_TIME, PredictedPath, CelestialBody};
 use star_config::StarConfig;
 
 mod star_config;
@@ -35,7 +37,7 @@ fn main() {
         })
         .add_system(ui_system)
         .add_startup_system(update_setup)
-        .add_system(physics::estimate_paths)
+        // .add_system(physics::estimate_paths)
         .add_system(draw_paths)
         .add_stage_after(
             CoreStage::Update,
@@ -110,11 +112,7 @@ fn ui_system(
 struct BodyBundle {
     #[bundle]
     pbr: PbrBundle,
-    mass: Mass,
-    velocity: Velocity,
-    acceleration: Acceleration,
-    prev_acceleration: PrevAcceleration,
-    celestial_body: CelestialBody,
+    celestial_body: CelestialBody, 
     predicted_path: PredictedPath,
 }
 
@@ -185,13 +183,3 @@ fn draw_paths(
     }
 
 }
-
-// fn runge_kutta_4<F>(f: F, h: f32, x0: f32, y0: f32) -> f32
-// where F: Fn(f32, f32) -> f32 
-// {
-//     let k1 = f(x0, y0);
-//     let k2 = f(x0 + 0.5 * h, y0 + 0.5 * h * k1);
-//     let k3 = f(x0 + 0.5 * h, y0 + 0.5 * h * k2);
-//     let k4 = f(x0 + h, y0 + h * k3);
-//     y0 + (k1 + 2.0 * k2 + 2.0 * k3 + k4) * h / 6.0
-// }

@@ -1,19 +1,10 @@
-use bevy::prelude::*;
-use serde::Deserialize;
+use bevy::{prelude::*, ecs::query::WorldQuery};
 use crate::Settings;
 use core::ops::{Mul, Add};
 
 const GRAVITY_CONSTANT: f32 = 0.03;
 pub const DELTA_TIME: f64 = 0.005;
 
-#[derive(Component, Default, Deserialize, Debug, Copy, Clone)]
-pub struct Mass(pub f32);
-
-#[derive(Reflect, Component, Default, Debug, Clone)]
-pub struct Acceleration(pub Vec3);
-
-#[derive(Reflect, Component, Default, Debug, Clone)]
-pub struct Velocity(pub Vec3);
 
 #[derive(Reflect, Component)]
 pub struct Star;
@@ -24,192 +15,192 @@ pub struct PredictedPath {
 }
 
 #[derive(Reflect, Component, Default, Debug, Clone)]
-pub struct PrevAcceleration(pub Vec3);
+pub struct CelestialBody {
+    pub mass: f32,
+    pub vel: Vec3, 
+    pub acc: Vec3, 
+    pub prev_acc: Vec3,
+}
+//
+// impl CelestialBody {
+//     pub fn interact(&mut self, other: &mut Self) {
+//         todo!(); 
+//     }
+// }
 
-pub struct System {
-    pub entity: Entity,
-    pub mass: Mass,
-    pub acc: Acceleration, 
-    pub prev_acc: PrevAcceleration,
-    pub pos: Vec3, 
-    pub vel: Velocity, 
-    pub path: PredictedPath,
+
+#[derive(WorldQuery)]
+#[world_query(mutable)]
+pub struct CelestialBodyQuery {
+    entity: Entity,
+    celestial_body: &'static mut CelestialBody,
+    pos: &'static mut Transform, 
 }
 
-#[derive(Component, Default)]
-pub struct CelestialBody;
+impl Clone for CelestialBodyQueryItem<'_> {
+    fn clone(&self) -> Self {
+        CelestialBodyQueryItem {
+            entity: self.entity.clone(),
+            celestial_body: self.celestial_body.clone(),
+            pos: self.pos.clone()
+        }
+    }
+}
+
+trait Integrator = Fn(f32, Vec3, Vec3, Vec3, Vec3) -> (Vec3, Vec3);
+
+impl<'w> CelestialBodyQueryItem<'w> {
+    fn interact(&mut self, other: &mut Self) {
+        let (new_acc_self, new_acc_other) = newtonian_gravity(
+            &self.mass, &self.pos.translation, &self.acc, 
+            &other.mass, &other.pos.translation, &other.acc, 
+        );
+        self.acc = new_acc_self;
+        other.acc = new_acc_other;
+    }
+
+    fn integrate(&mut self, dt: f32, f: impl Integrator) {
+        let (new_pos, new_vel) = f(
+            dt, self.pos.translation, self.vel, self.acc, self.prev_acc 
+        );
+
+        self.prev_acc = self.acc;
+        self.pos.translation = new_pos;
+        self.acc = Vec3::ZERO;
+        self.vel = new_vel;
+    }
+}
+
+use std::ops::{Deref, DerefMut};
+
+
+impl<'w> Deref for CelestialBodyQueryItem<'w> {
+    type Target = CelestialBody;
+
+    fn deref(&self) -> &Self::Target {
+        &self.celestial_body
+    }
+}
+
+impl<'w> DerefMut for CelestialBodyQueryItem<'w> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.celestial_body
+    }
+}
+
+
 
 pub fn interact_bodies(
-    mut query: Query<(Entity, &Mass, &GlobalTransform, &mut Acceleration)>,
+    mut query: Query<CelestialBodyQuery>,
     settings: Res<Settings>,
 ) {
     if !settings.play {
         return;
     }
 
-    let mut system = Vec::new();
-    for entity in &query {
-        system.push(entity.0.clone());
+    let mut iter = query.iter_combinations_mut();
+    while let Some([mut body1, mut body2]) = iter.fetch_next() {
+        body1.interact(&mut body2);
     }
-
-    // could be done more elegantly with iter_combinations_mut but this method is choosen to be as similar as possible to the estimate_paths function
-    for index1 in 0..system.len() {
-        for index2 in 0..index1 {
-            // if index1 == index2 {
-            //     continue;
-            // }
-            let s1 = query.get(system[index1]).unwrap();
-            let s2 = query.get(system[index2]).unwrap();
-            let mut acc1 = s1.3.clone();
-            let mut acc2 = s2.3.clone();
-            newtonian_gravity(
-                &s1.1, &s1.2.translation(), &mut acc1,
-                &s2.1, &s2.2.translation(), &mut acc2
-            );
-            query.get_mut(system[index1]).unwrap().3.0 = acc1.0;
-            query.get_mut(system[index2]).unwrap().3.0 = acc2.0;
-        }
-    }
-
-
-    // let mut iter = query.iter_combinations_mut();
-    // while let Some(
-    //     [
-    //         (m1, transform1, mut acc1),
-    //         (m2, transform2, mut acc2)
-    //     ]) = iter.fetch_next() {
-    //     newtonian_gravity(
-    //         &m1, &transform1.translation(), &mut acc1,
-    //         &m2, &transform2.translation(), &mut acc2
-    //     );
-    // }
 }
 
-fn newtonian_gravity(
-    Mass(m1): &Mass, &pos1: &Vec3, acc1: &mut Acceleration,
-    Mass(m2): &Mass, &pos2: &Vec3, acc2: &mut Acceleration,
-) {
-    let delta = pos2 - pos1;
-    let distance_sq: f32 = delta.length_squared();
-
-    let f = GRAVITY_CONSTANT / distance_sq;
-    let force_unit_mass = delta * f;
-
-    acc1.0 += force_unit_mass * (*m2);
-    acc2.0 -= force_unit_mass * (*m1);
-
-}
 
 pub fn integrate(
-    mut query: Query<(&mut Acceleration, &mut PrevAcceleration, &mut Transform, &mut Velocity)>,
+    mut query: Query<CelestialBodyQuery>,
     settings: Res<Settings>,
 ) {
     if !settings.play {
         return;
     }
     let dt = DELTA_TIME as f32;
-    for(mut acceleration, mut prev_acceleration, mut transform, mut velocity) in &mut query {
-        // let new_pos = transform.translation + velocity.0 * dt + acceleration.0 * (dt_sq * 0.5);
-        // let new_acc = Vec3::ZERO;
-        // let new_vel = velocity.0 + (acceleration.0 + prev_acceleration.0) * (dt * 0.5);
-
-        let (new_pos, new_vel) = velocity_verlet(
-            dt,
-            acceleration.0,
-            prev_acceleration.0,
-            transform.translation,
-            velocity.0
-        );
-
-        prev_acceleration.0 = acceleration.0;
-        transform.translation = new_pos;
-        acceleration.0 = Vec3::ZERO;
-        velocity.0 = new_vel;
+    for mut entry in &mut query {
+        entry.integrate(dt, velocity_verlet);
     }
 }
 
+trait MultipleMut<T> {
+    fn get_both_mut(&mut self, i: usize, j: usize) -> [&mut T; 2]; 
+}
+
+impl<T> MultipleMut<T> for Vec<T> {
+    fn get_both_mut(&mut self, i: usize, j: usize) -> [&mut T; 2] {
+        if i < j {
+            let (head, tail) = self.split_at_mut(j);
+            return [&mut head[i], &mut tail[0]];
+        } else {
+            let (head, tail) = self.split_at_mut(i);
+            return [&mut tail[0], &mut head[j]];
+        }
+    }
+}
+
+use std::iter::zip;
+
 pub fn estimate_paths(
-    mut query: Query<(Entity, &Mass, &Acceleration, &PrevAcceleration, &Transform, &Velocity, &mut PredictedPath)>,
+    mut query: Query<CelestialBodyQuery>,
+    mut paths_query: Query<&mut PredictedPath>,
     settings: Res<Settings>,
 ) {
-    let mut system: Vec<System> = vec![];
-    for(entity, mass, acceleration, prev_acceleration, transform, velocity, mut path) in &mut query {
-        path.pos_vec.clear();
+    let mut system: Vec<CelestialBodyQueryItem> = vec![];
+    let mut paths: Vec<PredictedPath> = vec![];
 
-        system.push(System {
-            entity,
-            mass: mass.clone(),
-            pos: transform.translation.clone(),
-            vel: velocity.clone(),
-            acc: acceleration.clone(),
-            prev_acc: prev_acceleration.clone(),
-            path: PredictedPath{ pos_vec: vec![] },
-        });
+    for body in &mut query {
+        system.push(body.clone());
+        paths.push(PredictedPath{ pos_vec: vec![]});
     }
-
     for i in 0..(settings.trail_length * settings.trail_interval) {
         for index1 in 0..system.len() {
             for index2 in 0..index1 {
-                // if index1 == index2 {
-                //     continue;
-                // }
-                let s1 = &system[index1];
-                let s2 = &system[index2];
-                let mut acc1 = s1.acc.clone();
-                let mut acc2 = s2.acc.clone();
-                newtonian_gravity(
-                    &s1.mass, &s1.pos, &mut acc1,
-                    &s2.mass, &s2.pos, &mut acc2
-                );
-                system.get_mut(index1).unwrap().acc = acc1;
-                system.get_mut(index2).unwrap().acc = acc2;
+                let [body1, body2] = system.get_both_mut(index1, index2);
+                body1.interact(body2);
             }
         }
 
-        // update pos, vel
-
-        let dt = DELTA_TIME as f32;
-        for s in &mut system {
-            let (new_pos, new_vel) = velocity_verlet(
-                dt,
-                s.acc.0,
-                s.prev_acc.0,
-                s.pos,
-                s.vel.0
-            );
-            s.prev_acc.0 = s.acc.0;
-            s.pos = new_pos;
-            s.acc.0 = Vec3::ZERO;
-            s.vel.0 = new_vel;
-
+        for (body, path) in zip(&mut system, &mut paths) { 
+            body.integrate(DELTA_TIME as f32, velocity_verlet);
 
             if (i % settings.trail_interval) == 0 {
-                s.path.pos_vec.push(new_pos);
+                path.pos_vec.push(body.pos.translation);
             }
         }
     }
 
-    for s in &system {
-        let (_, _, _, _, _, _, mut path) = query.get_mut(s.entity).unwrap();
-        path.pos_vec.clone_from(&s.path.pos_vec);
+    for (body, path) in zip(&mut system, &paths) { 
+        // path.pos_vec.clear();
+        let mut query_path = paths_query.get_mut(body.entity).unwrap();
+        query_path.pos_vec.clear();
+        query_path.pos_vec.clone_from(&path.pos_vec);
     }
+}
 
+fn newtonian_gravity(
+    m1: &f32, &pos1: &Vec3, acc1: &Vec3,
+    m2: &f32, &pos2: &Vec3, acc2: &Vec3,
+) -> (Vec3, Vec3){
+    let delta = pos2 - pos1;
+    let distance_sq: f32 = delta.length_squared();
+    let force_dir = delta.normalize();
+    let force = force_dir * GRAVITY_CONSTANT * (*m1) * (*m2) / distance_sq;
+
+    let new_acc1 = *acc1 + force * (*m2) / (*m1);
+    let new_acc2 = *acc2 - force * (*m1) / (*m1);
+    (new_acc1, new_acc2)
 }
 
 fn velocity_verlet(
     dt: f32,
-    acceleration: Vec3,
-    prev_acceleration: Vec3,
     pos: Vec3,
-    velocity: Vec3,
+    vel: Vec3,
+    acc: Vec3,
+    prev_acc: Vec3,
 ) -> (Vec3, Vec3) {
     let dt_sq = dt*dt;
-    let new_pos = pos + velocity * dt + acceleration * (dt_sq * 0.5);
-    let new_vel = velocity + (acceleration + prev_acceleration) * (dt * 0.5);
+    let new_pos = pos + vel * dt + acc * (dt_sq * 0.5);
+    let new_vel = vel + (acc + prev_acc) * (dt * 0.5);
 
     return (new_pos, new_vel);
 }
-
+#[allow(dead_code)]
 fn runge_kutta_4_nystorm<F, Num>
 (
     f: F,

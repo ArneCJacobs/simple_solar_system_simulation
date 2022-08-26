@@ -1,14 +1,14 @@
 use bevy_inspector_egui::Inspectable;
 use bevy::prelude::*;
 use serde::Deserialize;
-use crate::physics::{Acceleration, Mass, Star, Velocity, PrevAcceleration};
+use crate::physics::{Star, CelestialBody};
 use crate::BodyBundle;
 
 #[derive(Deserialize, Debug, Inspectable, Default)]
 pub struct StarConfig {
-    #[inspectable(min=100.0, max=10.0e5)]
+    #[inspectable(min=100.0)]
     mass: f32,
-    #[inspectable(min=0.001, max=100.0)]
+    #[inspectable(min=0.1)]
     radius: f32,
     velocity: Vec3,
     pos: Vec3,
@@ -25,21 +25,22 @@ impl StarConfig {
     ) {
         let [r, g, b]: [u8; 3] = self.color.clone().try_into().unwrap();
         let color = Color::rgb_u8(r, g, b);
-        let bundle = BodyBundle {
-            pbr: PbrBundle {
-                transform: Transform {
-                    translation: self.pos.into(),
-                    scale: Vec3::splat(self.radius),
-                    ..default()
-                },
-                mesh,
-                material: materials.add(color.into()),
+        let pbr = PbrBundle {
+            transform: Transform {
+                translation: self.pos.into(),
+                scale: Vec3::splat(self.radius),
                 ..default()
             },
-            mass: Mass(self.mass),
-            acceleration: Acceleration(Vec3::ZERO),
-            prev_acceleration: PrevAcceleration(Vec3::ZERO),
-            velocity: Velocity(self.velocity),
+            mesh,
+            material: materials.add(color.into()),
+            ..default()
+        };
+        let bundle = BodyBundle {
+            pbr,
+            celestial_body: CelestialBody {
+                mass: self.mass,
+                ..default()
+            },
             ..default()
         };
 
