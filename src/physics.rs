@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use serde::Deserialize;
 use crate::Settings;
-
+use core::ops::{Mul, Add};
 
 const GRAVITY_CONSTANT: f32 = 0.03;
 pub const DELTA_TIME: f64 = 0.005;
@@ -213,4 +213,32 @@ fn velocity_verlet(
     let new_acc = Vec3::ZERO;
 
     return (new_pos, new_vel, new_acc);
+}
+
+fn runge_kutta_4_nystttrom<F, Num, Fl>(
+    f: F,
+    dt: f32,
+    acceleration: Num,
+    prev_acceleration: Num,
+    pos: Num,
+    velocity: Num,
+) -> f32
+where 
+    Num: Mul<f32> + Add<Num>,
+    F: Fn(Num, Num, Num) -> Num
+{
+    todo!();    
+}
+
+#[allow(dead_code)]
+fn runge_kutta_4<F, Num>(f: F, h: f32, x0: Num, y0: Num) -> Num
+where
+    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
+    F: Fn(Num, Num) -> Num,
+{
+    let k1 = f(x0, y0);
+    let k2 = f(x0 + h * 0.5, y0 + k1 * 0.5 * h);
+    let k3 = f(x0 + 0.5 * h, y0 + k1 * 0.5 * h);
+    let k4 = f(x0 + h, y0 + k3 * h);
+    y0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0)
 }
