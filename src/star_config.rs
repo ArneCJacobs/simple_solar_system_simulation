@@ -14,7 +14,6 @@ pub struct StarConfig {
     pos: Vec3,
     color: [u8; 3],
     star: Option<bool>,
-    inertia: Option<Vec3>,
 }
 
 impl Default for StarConfig {
@@ -26,7 +25,6 @@ impl Default for StarConfig {
             pos: default(), 
             color: default(), 
             star: Some(default()), 
-            inertia: Some(default())
         }
     }
 }
