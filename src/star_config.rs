@@ -4,7 +4,7 @@ use serde::Deserialize;
 use crate::physics::{Star, CelestialBody};
 use crate::BodyBundle;
 
-#[derive(Deserialize, Debug, Inspectable, Default)]
+#[derive(Deserialize, Debug, Inspectable)]
 pub struct StarConfig {
     #[inspectable(min=100.0)]
     mass: f32,
@@ -14,6 +14,21 @@ pub struct StarConfig {
     pos: Vec3,
     color: [u8; 3],
     star: Option<bool>,
+    inertia: Option<Vec3>,
+}
+
+impl Default for StarConfig {
+    fn default() -> Self {
+        StarConfig { 
+            mass: default(), 
+            radius: default(), 
+            velocity: default(),
+            pos: default(), 
+            color: default(), 
+            star: Some(default()), 
+            inertia: Some(default())
+        }
+    }
 }
 
 impl StarConfig {
