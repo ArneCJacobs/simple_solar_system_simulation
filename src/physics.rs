@@ -1,6 +1,7 @@
 use bevy::{prelude::*, ecs::query::WorldQuery};
 use crate::Settings;
-use core::ops::{Mul, Add};
+use bevy_inspector_egui::Inspectable;
+
 
 const GRAVITY_CONSTANT: f32 = 0.03;
 pub const DELTA_TIME: f64 = 0.005;
@@ -14,7 +15,8 @@ pub struct PredictedPath {
     pub pos_vec: Vec<Vec3>
 }
 
-#[derive(Reflect, Component, Default, Debug, Clone)]
+#[derive(Reflect, Inspectable, Component, Default, Debug, Clone)]
+#[reflect(Component)]
 pub struct CelestialBody {
     pub mass: f32,
     pub vel: Vec3, 
@@ -61,15 +63,16 @@ trait StepCalcBody<'a> {
 
 impl<'a, T: CalcBody<'a>> StepCalcBody<'a> for T {
     fn interact(&'a mut self, other: &'a mut Self) {
-        let (_, pos1, mut cb1) = self.fields();
-        let (_, pos2, mut cb2) = other.fields();
+        let (_, &mut pos1, cb1) = self.fields();
+        let (_, &mut pos2, cb2) = other.fields();
 
-        let (new_acc_self, new_acc_other) = newtonian_gravity(
-            &cb1.mass, &pos1, &cb1.acc, 
-            &cb2.mass, &pos2, &cb2.acc, 
-        );
-        cb1.acc = new_acc_self;
-        cb2.acc = new_acc_other;
+        let delta = pos2 - pos1;
+        let distance_sq: f32 = delta.length_squared();
+
+        let f = GRAVITY_CONSTANT / distance_sq;
+        let force_unit_mass = delta * f;
+        cb1.acc += force_unit_mass * cb2.mass;
+        cb2.acc -= force_unit_mass * cb1.mass;
     }
 
     fn integrate(&'a mut self, dt: f32, f: impl Integrator) {
@@ -177,20 +180,6 @@ pub fn estimate_paths(
         query_path.pos_vec.clone_from(&path.pos_vec);
     }
 }
-//
-fn newtonian_gravity(
-    m1: &f32, &pos1: &Vec3, acc1: &Vec3,
-    m2: &f32, &pos2: &Vec3, acc2: &Vec3,
-) -> (Vec3, Vec3){
-    let delta = pos2 - pos1;
-    let distance_sq: f32 = delta.length_squared();
-    let force_dir = delta.normalize();
-    let force = force_dir * GRAVITY_CONSTANT * (*m1) * (*m2) / distance_sq;
-
-    let new_acc1 = *acc1 + force * (*m2) / (*m1);
-    let new_acc2 = *acc2 - force * (*m1) / (*m1);
-    (new_acc1, new_acc2)
-}
 
 fn velocity_verlet(
     dt: f32,
@@ -202,7 +191,6 @@ fn velocity_verlet(
     let dt_sq = dt*dt;
     let new_pos = pos + vel * dt + acc * (dt_sq * 0.5);
     let new_vel = vel + (acc + prev_acc) * (dt * 0.5);
-
     return (new_pos, new_vel);
 }
 // #[allow(dead_code)]

@@ -39,6 +39,7 @@ impl StarConfig {
             pbr,
             celestial_body: CelestialBody {
                 mass: self.mass,
+                vel: self.velocity,
                 ..default()
             },
             ..default()

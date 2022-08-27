@@ -5,7 +5,8 @@ use std::{env, fs};
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
 use bevy_egui::EguiPlugin;
-use bevy_inspector_egui::{Inspectable, InspectorPlugin};
+use bevy_inspector_egui::widgets::InspectorQuery;
+use bevy_inspector_egui::{Inspectable, InspectorPlugin, WorldInspectorPlugin};
 use bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
 use physics::{DELTA_TIME, PredictedPath, CelestialBody};
@@ -18,6 +19,11 @@ mod physics;
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
 struct FixedUpdateStage;
 
+#[derive(Inspectable, Default)]
+struct Inspector {
+    root_elements: InspectorQuery<&'static mut CelestialBody, &'static mut Transform>,
+}
+
 fn main() {
     App::new()
         .add_startup_system(setup)
@@ -27,6 +33,8 @@ fn main() {
         .add_plugin(EguiPlugin)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
         .add_plugin(InspectorPlugin::<Settings>::new())
+        .register_type::<CelestialBody>()
+        .add_plugin(InspectorPlugin::<Inspector>::new())
         .insert_resource(ClearColor(Color::BLACK))
         // transform gizmo
         .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
