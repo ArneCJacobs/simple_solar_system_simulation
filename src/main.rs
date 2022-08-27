@@ -37,7 +37,7 @@ fn main() {
         })
         .add_system(ui_system)
         .add_startup_system(update_setup)
-        // .add_system(physics::estimate_paths)
+        .add_system(physics::estimate_paths)
         .add_system(draw_paths)
         .add_stage_after(
             CoreStage::Update,
