@@ -1,13 +1,15 @@
 use bevy::{prelude::*, ecs::query::WorldQuery};
 use crate::Settings;
 use bevy_inspector_egui::Inspectable;
+use core::ops::{Add, Mul};
+use nalgebra::{base::SVector, DVector};
 
 
 const GRAVITY_CONSTANT: f32 = 0.03;
-pub const DELTA_TIME: f64 = 0.005;
+pub const DELTA_TIME: f64 = 0.001;
 
 
-#[derive(Reflect, Component)]
+#[derive(Component, Reflect)]
 pub struct Star;
 
 #[derive(Component, Default, Clone)]
@@ -193,53 +195,76 @@ fn velocity_verlet(
     let new_vel = vel + (acc + prev_acc) * (dt * 0.5);
     return (new_pos, new_vel);
 }
-// #[allow(dead_code)]
-// fn runge_kutta_4_nystorm<F, Num>
-// (
-//     f: F,
-//     h: f32,
-//     t0: Num,
-//     y0: Num,
-//     dy0: Num,
-// ) -> (Num, Num)
-// where 
-//     Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
-//     F: Fn(Num, Num, Num) -> Num,
-// {
-//     let k1 = f(t0, dy0, y0);
-//
-//     let dy1 = dy0 + k1 * (h * 0.5); 
-//     let y1 = y0 + ((dy0 + dy1) * 0.5) * (h * 0.5);
-//     let k2 = f(t0 + h * 0.5, dy1, y1);
-//
-//     let dy2 = dy0 + dy0 * (h * 0.5);
-//     let y2 = y0 + (dy0 + dy2) * 0.5 * (h * 0.5); 
-//     let k3 = f(t0 + h * 0.5, dy2, y2);
-//
-//     let dy3 = dy0 + k3 * h;
-//     let y3 = y0 + (dy0 + dy3) * (h * 0.5);
-//     let k4 = f(t0 + h, dy3, y3);
-//
-//     let dy = dy0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
-//     let y = y0 + (dy1 + dy2 * 2.0 + dy3 * 2.0 + y3) * (h / 6.0);
-//
-//     (dy, y)
-// }
-//
-// #[allow(dead_code)]
-// fn runge_kutta_4<F, Num>(
-//     f: F, 
-//     h: f32, 
-//     x0: Num, 
-//     y0: Num
-// ) -> Num
-// where
-//     Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
-//     F: Fn(Num, Num) -> Num,
-// {
-//     let k1 = f(x0, y0);
-//     let k2 = f(x0 + h * 0.5, y0 + k1 * 0.5 * h);
-//     let k3 = f(x0 + 0.5 * h, y0 + k1 * 0.5 * h);
-//     let k4 = f(x0 + h, y0 + k3 * h);
-//     y0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0)
-// }
+
+fn test_integration(
+
+    ) {
+    let pos_vec: Vec<Vec3> = Vec::new();
+    let vector: DVector<Vec3> = DVector::from_vec(pos_vec);
+    let temp = |dt: f32, poss: DVector<Vec3>, vels: DVector<Vec3>| -> DVector<Vec3> { 
+        DVector::from_element(poss.nrows(), Vec3::ZERO)
+    }; 
+    let dummy_pos = Vec3::ZERO;
+    let dummy_vel = Vec3::ZERO;
+    let dummy_dtime = 0;
+    let (new_vel, new_pos) = runge_kutta_4_nystorm(
+        temp,
+        dummy_dtime, 
+        0, 
+        dummy_pos, 
+        dummy_vel,
+    );
+}
+
+
+#[allow(dead_code)]
+fn runge_kutta_4_nystorm<F, Num>
+(
+    f: F,
+    h: f32, // dt
+    t0: f32,
+    y0: Num,
+    dy0: Num,
+) -> (Num, Num)
+where 
+    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
+    F: Fn(f32, Num, Num) -> Num, // f(t, x, x') = x'' or f(time, value, first-derivative) = second
+                                 // derivative
+{
+    let k1 = f(t0, dy0, y0);
+
+    let dy1 = dy0 + k1 * (h * 0.5); 
+    let y1 = y0 + ((dy0 + dy1) * 0.5) * (h * 0.5);
+    let k2 = f(t0 + h * 0.5, dy1, y1);
+
+    let dy2 = dy0 + dy0 * (h * 0.5);
+    let y2 = y0 + (dy0 + dy2) * 0.5 * (h * 0.5); 
+    let k3 = f(t0 + h * 0.5, dy2, y2);
+
+    let dy3 = dy0 + k3 * h;
+    let y3 = y0 + (dy0 + dy3) * (h * 0.5);
+    let k4 = f(t0 + h, dy3, y3);
+
+    let dy = dy0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
+    let y = y0 + (dy1 + dy2 * 2.0 + dy3 * 2.0 + y3) * (h / 6.0);
+
+    (dy, y)
+}
+
+#[allow(dead_code)]
+fn runge_kutta_4<F, Num>(
+    f: F, 
+    h: f32, 
+    x0: Num, 
+    y0: Num
+) -> Num
+where
+    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
+    F: Fn(Num, Num) -> Num,
+{
+    let k1 = f(x0, y0);
+    let k2 = f(x0 + h * 0.5, y0 + k1 * 0.5 * h);
+    let k3 = f(x0 + 0.5 * h, y0 + k1 * 0.5 * h);
+    let k4 = f(x0 + h, y0 + k3 * h);
+    y0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0)
+}
