@@ -2,7 +2,7 @@ use bevy::{prelude::*, ecs::query::WorldQuery};
 use crate::Settings;
 use bevy_inspector_egui::Inspectable;
 use core::ops::{Add, Mul};
-use ndarray::{Ix1, Array, Axis};
+use ndarray::{Ix1, Array};
 
 
 const GRAVITY_CONSTANT: f32 = 0.03;
@@ -196,18 +196,16 @@ fn velocity_verlet(
     return (new_pos, new_vel);
 }
 
-fn test_integration(
-
-    ) {
+fn test_integration() {
     let pos_vec: Vec<Vec3> = vec![Vec3::ZERO, Vec3::ZERO, Vec3::ZERO];
     let vector: Array<Vec3, Ix1> = Array::from_vec(pos_vec);
-    let temp = |dt: f32, poss: Array<Vec3, Ix1>, vels: Array<Vec3, Ix1>| -> Array<Vec3, Ix1> { 
+    let temp = |_dt: f32, poss: &Array<Vec3, Ix1>, _vels: &Array<Vec3, Ix1>| -> Array<Vec3, Ix1> { 
         Array::from_elem(poss.raw_dim(), Vec3::ZERO)
     }; 
     let dummy_pos = vector.clone();
     let dummy_vel = vector.clone();
     let dummy_dtime = 0.0;
-    let (new_vel, new_pos) = runge_kutta_4_nystorm(
+    let (_new_vel, _new_pos) = runge_kutta_4_nystorm(
         temp,
         dummy_dtime, 
         0.0, 
@@ -227,23 +225,23 @@ fn runge_kutta_4_nystorm<F, Num>
     dy0: Num,
 ) -> (Num, Num)
 where 
-    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Clone,
-    F: Fn(f32, Num, Num) -> Num, // f(t, x, x') = x'' or f(time, value, first-derivative) = second
-                                 // derivative
+    for<'d> Num: Mul<f32, Output = Num> + Add<&'d Num, Output=Num> + Add<f32, Output=Num> + Clone + 'd + Add + Add<Output = Num>,
+    for<'c> &'c Num: Add<Num, Output = Num> + Add<&'c Num, Output = Num> + Mul<f32, Output=Num>,
+    F: for<'b> Fn(f32, &'b Num, &'b Num) -> Num, // f(t, x, x') = x'' or f(time, value, first-derivative) = second
 {
-    let k1 = f(t0, dy0, y0);
+    let k1 = f(t0, &dy0, &y0);
 
-    let dy1 = dy0 + k1 * (h * 0.5); 
-    let y1 = y0 + ((dy0 + dy1) * 0.5) * (h * 0.5);
-    let k2 = f(t0 + h * 0.5, dy1, y1);
+    let dy1 = &dy0 + &k1 * (h * 0.5); 
+    let y1 = &y0 + ((&dy0 + &dy1) * 0.5) * (h * 0.5);
+    let k2 = f(t0 + h * 0.5, &dy1, &y1);
 
-    let dy2 = dy0 + dy0 * (h * 0.5);
-    let y2 = y0 + (dy0 + dy2) * 0.5 * (h * 0.5); 
-    let k3 = f(t0 + h * 0.5, dy2, y2);
+    let dy2 = &dy0 + &dy0 * (h * 0.5);
+    let y2 = &y0 + (&dy0 + &dy2) * 0.5 * (h * 0.5); 
+    let k3 = f(t0 + h * 0.5, &dy2, &y2);
 
-    let dy3 = dy0 + k3 * h;
-    let y3 = y0 + (dy0 + dy3) * (h * 0.5);
-    let k4 = f(t0 + h, dy3, y3);
+    let dy3 = &dy0 + &k3 * h;
+    let y3 = &y0 + (&dy0 + &dy3) * (h * 0.5);
+    let k4 = f(t0 + h, &dy3, &y3);
 
     let dy = dy0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
     let y = y0 + (dy1 + dy2 * 2.0 + dy3 * 2.0 + y3) * (h / 6.0);
