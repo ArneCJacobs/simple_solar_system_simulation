@@ -2,7 +2,7 @@ use bevy::{prelude::*, ecs::query::WorldQuery};
 use crate::Settings;
 use bevy_inspector_egui::Inspectable;
 use core::ops::{Add, Mul};
-use nalgebra::{base::SVector, DVector};
+use ndarray::{Ix1, Array, Axis};
 
 
 const GRAVITY_CONSTANT: f32 = 0.03;
@@ -199,18 +199,18 @@ fn velocity_verlet(
 fn test_integration(
 
     ) {
-    let pos_vec: Vec<Vec3> = Vec::new();
-    let vector: DVector<Vec3> = DVector::from_vec(pos_vec);
-    let temp = |dt: f32, poss: DVector<Vec3>, vels: DVector<Vec3>| -> DVector<Vec3> { 
-        DVector::from_element(poss.nrows(), Vec3::ZERO)
+    let pos_vec: Vec<Vec3> = vec![Vec3::ZERO, Vec3::ZERO, Vec3::ZERO];
+    let vector: Array<Vec3, Ix1> = Array::from_vec(pos_vec);
+    let temp = |dt: f32, poss: Array<Vec3, Ix1>, vels: Array<Vec3, Ix1>| -> Array<Vec3, Ix1> { 
+        Array::from_elem(poss.raw_dim(), Vec3::ZERO)
     }; 
-    let dummy_pos = Vec3::ZERO;
-    let dummy_vel = Vec3::ZERO;
-    let dummy_dtime = 0;
+    let dummy_pos = vector.clone();
+    let dummy_vel = vector.clone();
+    let dummy_dtime = 0.0;
     let (new_vel, new_pos) = runge_kutta_4_nystorm(
         temp,
         dummy_dtime, 
-        0, 
+        0.0, 
         dummy_pos, 
         dummy_vel,
     );
@@ -227,7 +227,7 @@ fn runge_kutta_4_nystorm<F, Num>
     dy0: Num,
 ) -> (Num, Num)
 where 
-    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Copy,
+    Num: Mul<f32, Output = Num> + Add<Num, Output=Num> + Add<f32, Output=Num> + Clone,
     F: Fn(f32, Num, Num) -> Num, // f(t, x, x') = x'' or f(time, value, first-derivative) = second
                                  // derivative
 {
