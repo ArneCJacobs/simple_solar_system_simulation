@@ -199,14 +199,14 @@ fn velocity_verlet(
 fn test_integration() {
     let pos_vec: Vec<Vec3> = vec![Vec3::ZERO, Vec3::ZERO, Vec3::ZERO];
     let vector: Array<Vec3, Ix1> = Array::from_vec(pos_vec);
-    let temp = |_dt: f32, poss: &Array<Vec3, Ix1>, _vels: &Array<Vec3, Ix1>| -> Array<Vec3, Ix1> { 
+    let closure = |_dt: f32, poss: &Array<Vec3, Ix1>, _vels: &Array<Vec3, Ix1>| -> Array<Vec3, Ix1> { 
         Array::from_elem(poss.raw_dim(), Vec3::ZERO)
     }; 
     let dummy_pos = vector.clone();
     let dummy_vel = vector.clone();
     let dummy_dtime = 0.0;
     let (_new_vel, _new_pos) = runge_kutta_4_nystorm(
-        temp,
+        closure,
         dummy_dtime, 
         0.0, 
         dummy_pos, 
@@ -216,18 +216,13 @@ fn test_integration() {
 
 
 #[allow(dead_code)]
-fn runge_kutta_4_nystorm<F, Num>
-(
-    f: F,
-    h: f32, // dt
-    t0: f32,
-    y0: Num,
-    dy0: Num,
+fn runge_kutta_4_nystorm<F, Num>(
+    f: F, h: f32 /* td */,  t0: f32, y0: Num, dy0: Num,
 ) -> (Num, Num)
 where 
-    for<'d> Num: Mul<f32, Output = Num> + Add<&'d Num, Output=Num> + Add<f32, Output=Num> + Clone + 'd + Add + Add<Output = Num>,
-    for<'c> &'c Num: Add<Num, Output = Num> + Add<&'c Num, Output = Num> + Mul<f32, Output=Num>,
-    F: for<'b> Fn(f32, &'b Num, &'b Num) -> Num, // f(t, x, x') = x'' or f(time, value, first-derivative) = second
+    for<'a> Num: Add<Output=Num> + Add<&'a Num, Output=Num> + Add<f32, Output=Num> + Mul<f32, Output=Num>,
+    for<'c> &'c Num: Add<Num, Output=Num> + Add<&'c Num, Output=Num> + Mul<f32, Output=Num>,
+    F: for<'b> Fn(f32, &'b Num, &'b Num) -> Num, // f(t, x, x') = x'' or f(time, value, first-derivative) = second-derivative
 {
     let k1 = f(t0, &dy0, &y0);
 
@@ -235,7 +230,7 @@ where
     let y1 = &y0 + ((&dy0 + &dy1) * 0.5) * (h * 0.5);
     let k2 = f(t0 + h * 0.5, &dy1, &y1);
 
-    let dy2 = &dy0 + &dy0 * (h * 0.5);
+    let dy2 = &dy0 + &k2 * (h * 0.5);
     let y2 = &y0 + (&dy0 + &dy2) * 0.5 * (h * 0.5); 
     let k3 = f(t0 + h * 0.5, &dy2, &y2);
 
