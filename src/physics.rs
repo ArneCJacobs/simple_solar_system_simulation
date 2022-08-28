@@ -1,4 +1,4 @@
-use bevy::{prelude::*, ecs::query::WorldQuery};
+use bevy::{prelude::*, ecs::query::WorldQuery, time::FixedTimesteps};
 use crate::Settings;
 use bevy_inspector_egui::Inspectable;
 use core::ops::{Add, Mul};
@@ -100,7 +100,8 @@ pub struct CelestialBodyQuery {
 trait Integrator = Fn(f32, Vec3, Vec3, Vec3, Vec3) -> (Vec3, Vec3);
 //
 //
-pub fn interact_bodies(
+
+pub fn step_system(
     mut query: Query<CelestialBodyQuery>,
     settings: Res<Settings>,
 ) {
@@ -112,21 +113,28 @@ pub fn interact_bodies(
     while let Some([mut body1, mut body2]) = iter.fetch_next() {
         body1.interact(&mut body2);
     }
-}
-//
-//
-pub fn integrate(
-    mut query: Query<CelestialBodyQuery>,
-    settings: Res<Settings>,
-) {
-    if !settings.play {
-        return;
-    }
+
+
     let dt = DELTA_TIME as f32;
+    // *time_passed += dt;
+    // let closure = |f32, Vec3, Vec3, Vec3, Vec3| -> (Vec3, Vec3) { 
+    //     runge_kutta_4_nystorm(f, h, t0, y0, dy0)
+    // }
     for mut entry in &mut query {
         entry.integrate(dt, velocity_verlet);
     }
 }
+//
+//
+// pub fn integrate(
+//     mut query: Query<CelestialBodyQuery>,
+//     settings: Res<Settings>,
+//     mut time_passed: Local<f32>,
+// ) {
+//     if !settings.play {
+//         return;
+//     }
+// }
 
 trait MultipleMut<T> {
     fn get_both_mut(&mut self, i: usize, j: usize) -> [&mut T; 2]; 
@@ -205,7 +213,7 @@ fn test_integration() {
     let dummy_pos = vector.clone();
     let dummy_vel = vector.clone();
     let dummy_dtime = 0.0;
-    let (_new_vel, _new_pos) = runge_kutta_4_nystorm(
+    let (_new_pos, _new_vel) = runge_kutta_4_nystorm(
         closure,
         dummy_dtime, 
         0.0, 
@@ -217,7 +225,7 @@ fn test_integration() {
 
 #[allow(dead_code)]
 fn runge_kutta_4_nystorm<F, Num>(
-    f: F, h: f32 /* td */,  t0: f32, y0: Num, dy0: Num,
+    f: F, h: f32 /* dt */,  t0: f32, y0: Num, dy0: Num,
 ) -> (Num, Num)
 where 
     for<'a> Num: Add<Output=Num> + Add<&'a Num, Output=Num> + Add<f32, Output=Num> + Mul<f32, Output=Num>,
@@ -241,7 +249,7 @@ where
     let dy = dy0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
     let y = y0 + (dy1 + dy2 * 2.0 + dy3 * 2.0 + y3) * (h / 6.0);
 
-    (dy, y)
+    (y, dy)
 }
 
 #[allow(dead_code)]

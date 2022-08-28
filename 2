@@ -54,8 +54,8 @@ fn main() {
             FixedUpdateStage,
             SystemStage::single_threaded()
                 .with_run_criteria(FixedTimestep::step(DELTA_TIME).with_label(LABEL))
-                .with_system(physics::step_system)
-                // .with_system(physics::integrate.after(physics::step_system)),
+                .with_system(physics::interact_bodies)
+                .with_system(physics::integrate.after(physics::interact_bodies)),
         )
         .run();
 
