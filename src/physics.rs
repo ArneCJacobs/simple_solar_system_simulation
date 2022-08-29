@@ -1,8 +1,9 @@
 use bevy::{prelude::*, ecs::query::WorldQuery, time::FixedTimesteps};
+use itertools::izip;
 use crate::Settings;
 use bevy_inspector_egui::Inspectable;
 use core::ops::{Add, Mul};
-use ndarray::{Ix1, Array};
+use ndarray::{Ix1, Array, Axis};
 
 
 const GRAVITY_CONSTANT: f32 = 0.03;
@@ -26,6 +27,15 @@ pub struct CelestialBody {
     pub prev_acc: Vec3,
 }
 
+
+
+
+pub struct Consts {
+    pub mass: f32,
+    pub entity: Entity,
+}
+
+
 pub struct CelestialBodyCalcBody {
     entity: Entity,
     celestial_body: CelestialBody,
@@ -35,6 +45,16 @@ pub struct CelestialBodyCalcBody {
 trait CalcBody<'a> {
     fn fields(&'a mut self) -> (Entity, &'a mut Vec3, &'a mut CelestialBody);
 }
+
+impl From<&CelestialBodyCalcBody> for Consts {
+    fn from(cb: &CelestialBodyCalcBody) -> Self {
+        Consts {
+            entity: cb.entity.clone(),
+            mass: cb.celestial_body.mass,
+        } 
+    }
+}
+
 
 impl From<CelestialBodyQueryItem<'_>> for CelestialBodyCalcBody {
    fn from(item: CelestialBodyQueryItem<'_>) -> Self {
@@ -62,6 +82,21 @@ trait StepCalcBody<'a> {
     fn interact(&'a mut self, other: &'a mut Self);
     fn integrate(&'a mut self, dt: f32, f: impl Integrator);
 }
+
+fn interact_gravity(
+    pos1: &Vec3, vel1: &Vec3, acc1: &mut Vec3, consts1: &Consts,
+    pos2: &Vec3, vel2: &Vec3, consts2: &Consts,
+) {
+    let delta = *pos2 - *pos1;
+    let distance_sq: f32 = delta.length_squared();
+
+    let f = GRAVITY_CONSTANT / distance_sq;
+    let force_unit_mass = delta * f;
+    *acc1 += force_unit_mass * consts2.mass;
+    // cb2.acc -= force_unit_mass * consts1.mass;
+    
+}
+
 
 impl<'a, T: CalcBody<'a>> StepCalcBody<'a> for T {
     fn interact(&'a mut self, other: &'a mut Self) {
@@ -108,12 +143,18 @@ pub fn step_system(
     if !settings.play {
         return;
     }
+    let mut system: Vec<CelestialBodyCalcBody> = vec![]; 
+
+    for body in &mut query {
+        system.push(body.into());
+    }
+
+    let mut system_vector: Array<CelestialBodyCalcBody, Ix1> = Array::from_vec(system);
 
     let mut iter = query.iter_combinations_mut();
     while let Some([mut body1, mut body2]) = iter.fetch_next() {
         body1.interact(&mut body2);
     }
-
 
     let dt = DELTA_TIME as f32;
     // *time_passed += dt;
@@ -151,6 +192,7 @@ impl<T> MultipleMut<T> for Vec<T> {
         }
     }
 }
+
 
 use std::iter::zip;
 
@@ -204,6 +246,45 @@ fn velocity_verlet(
     return (new_pos, new_vel);
 }
 
+type Vector<T> = Array<T, Ix1>;
+struct System {
+    pos_vec: Vector<Vec3>,
+    vel_vec: Vector<Vec3>,
+    consts_vec: Vector<Consts>,
+}
+
+impl System {
+    fn new(bodies: Vec<CelestialBodyCalcBody>) -> Self {
+        let pos_vec = Array::from_iter(bodies.iter().map(|body| body.pos.translation));
+        let vel_vec = Array::from_iter(bodies.iter().map(|body| body.celestial_body.vel));
+        let consts_vec = Array::from_iter(bodies.iter().map(|body| body.into()));
+        System {
+            pos_vec,
+            vel_vec,
+            consts_vec,
+        }
+    }
+
+    fn step(&mut self, dt: f32, time_passed: f32) -> (Vector<Vec3>, Vector<Vec3>) {
+        let integrate_func = |_t: f32, poss: &Vector<Vec3>, vels: &Vector<Vec3>| -> Vector<Vec3> {
+            let mut accs = Vector::from_elem(poss.raw_dim(), Vec3::ZERO);
+            for (pos1, vel1, mut acc1, consts1) in izip!(poss, vels, &mut accs, &self.consts_vec) {
+                for (pos2, vel2, consts2) in izip!(poss, vels, &self.consts_vec) {
+                    interact_gravity(
+                        &pos1, &vel1, &mut acc1, &consts1,
+                        &pos2, &vel2, &consts2,
+                    ); 
+                }
+            }
+            accs   
+        };
+
+        runge_kutta_4_nystorm(
+            integrate_func, dt, time_passed, &self.pos_vec, &self.vel_vec
+        )
+    }
+}
+
 fn test_integration() {
     let pos_vec: Vec<Vec3> = vec![Vec3::ZERO, Vec3::ZERO, Vec3::ZERO];
     let vector: Array<Vec3, Ix1> = Array::from_vec(pos_vec);
@@ -217,15 +298,15 @@ fn test_integration() {
         closure,
         dummy_dtime, 
         0.0, 
-        dummy_pos, 
-        dummy_vel,
+        &dummy_pos, 
+        &dummy_vel,
     );
 }
 
 
 #[allow(dead_code)]
 fn runge_kutta_4_nystorm<F, Num>(
-    f: F, h: f32 /* dt */,  t0: f32, y0: Num, dy0: Num,
+    f: F, h: f32 /* dt */,  t0: f32, y0: &Num, dy0: &Num
 ) -> (Num, Num)
 where 
     for<'a> Num: Add<Output=Num> + Add<&'a Num, Output=Num> + Add<f32, Output=Num> + Mul<f32, Output=Num>,
@@ -234,16 +315,16 @@ where
 {
     let k1 = f(t0, &dy0, &y0);
 
-    let dy1 = &dy0 + &k1 * (h * 0.5); 
-    let y1 = &y0 + ((&dy0 + &dy1) * 0.5) * (h * 0.5);
+    let dy1 = dy0 + &k1 * (h * 0.5); 
+    let y1 = y0 + ((dy0 + &dy1) * 0.5) * (h * 0.5);
     let k2 = f(t0 + h * 0.5, &dy1, &y1);
 
-    let dy2 = &dy0 + &k2 * (h * 0.5);
-    let y2 = &y0 + (&dy0 + &dy2) * 0.5 * (h * 0.5); 
+    let dy2 = dy0 + &k2 * (h * 0.5);
+    let y2 = y0 + (dy0 + &dy2) * 0.5 * (h * 0.5); 
     let k3 = f(t0 + h * 0.5, &dy2, &y2);
 
-    let dy3 = &dy0 + &k3 * h;
-    let y3 = &y0 + (&dy0 + &dy3) * (h * 0.5);
+    let dy3 = dy0 + &k3 * h;
+    let y3 = y0 + (dy0 + &dy3) * (h * 0.5);
     let k4 = f(t0 + h, &dy3, &y3);
 
     let dy = dy0 + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (h / 6.0);
