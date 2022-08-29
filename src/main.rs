@@ -55,22 +55,8 @@ fn main() {
             SystemStage::single_threaded()
                 .with_run_criteria(FixedTimestep::step(DELTA_TIME).with_label(LABEL))
                 .with_system(physics::step_system)
-                // .with_system(physics::integrate.after(physics::step_system)),
         )
         .run();
-
-    // let theta_0 = 1200.0; // kelvin
-    // let h = 240.0; // seconds
-    // let f = |_t: f32, theta: f32| -2.2067e-12 * (theta.powf(4.0) - 81e8);
-    // let mut theta = theta_0;
-    // let mut t = 0.0;
-    // // println!("{}", f(theta_0, 0.0));
-    // println!("it 0, theta: {}, t: {}", theta, t);
-    // for it in 0..=2 {
-    //     theta = runge_kutta_4(f, h, t, theta); 
-    //     println!("it {}, theta: {}, t: {}", it, theta, t);
-    //     t += h;
-    // }
 }
 
 
@@ -89,7 +75,7 @@ impl Default for Settings {
         Settings {
             play: false,
             trail_length: 10_00,
-            trail_interval: 20,
+            trail_interval: 10,
         }
     }
 }
