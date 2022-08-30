@@ -10,7 +10,7 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
 use itertools::izip;
-use physics::{DELTA_TIME, PredictedPath, CelestialBody, Vector, calculate_circular_orbit_velocity};
+use physics::{DELTA_TIME, PredictedPath, CelestialBody, Vector, calculate_circular_orbit_velocity, GRAVITY_CONSTANT};
 use star_config::StarConfig;
 
 mod star_config;
@@ -109,7 +109,7 @@ fn ui_system(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    planets: Query<Entity, With<CelestialBody>>,
+    planets: Query<(Entity, &CelestialBody, &Transform)>,
     mut settings: ResMut<Settings>,
 ) {
 
@@ -127,11 +127,25 @@ fn ui_system(
     });
 
     egui::Window::new("Select center planet").show(egui_context.ctx_mut(), |ui| {
-        for planet in &planets {
+        for (planet, cb, tr) in &planets {
             if ui.button(format!("{:?}", planet)).clicked() {
                 settings.center_planet = Some(planet);
             }
         }
+    });
+
+    egui::Window::new("stats").show(egui_context.ctx_mut(), |ui| {
+        let mut ke = 0.0;
+        for (_, planet, _) in &planets {
+            ke += 0.5 * planet.mass * planet.vel.length() * planet.vel.length();
+        }
+
+        let mut pe = 0.0;
+        for [(_, cb1, pos1), (_, cb2, pos2)] in planets.iter_combinations() {
+            let diff = pos2.translation - pos1.translation;
+            pe += GRAVITY_CONSTANT * cb1.mass * cb2.mass / diff.length(); 
+        }
+        ui.label(format!("KE: {:.2}, PE: {:.2}, TE: {:.2}", ke, pe, ke-pe));
     });
 }
 
