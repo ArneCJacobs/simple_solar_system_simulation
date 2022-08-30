@@ -7,7 +7,7 @@ use ndarray::{Ix1, Array};
 use std::{iter::zip, f32::consts::PI};
 
 
-const GRAVITY_CONSTANT: f32 = 0.09;
+const GRAVITY_CONSTANT: f32 = 0.01;
 // pub const DELTA_TIME: f64 = 0.0005;
 pub const DELTA_TIME: f64 = 0.0001;
 
@@ -17,19 +17,25 @@ pub fn calculate_circular_orbit_velocity(poss: &Vector<Vec3>, masses: &Vector<f3
         baricenter += *pos;
     }
     baricenter /= poss.len() as f32;
-    let mut accs = Vector::from_elem(poss.raw_dim(), Vec3::ZERO);
-    for (index1, (pos1, mass1, mut acc)) in izip!(poss, masses, &mut accs).enumerate() {
+    let mut tau = Vector::from_elem(poss.raw_dim(), Vec3::ZERO);
+    for (index1, (pos1, mass1, mut tau1)) in izip!(poss, masses, &mut tau).enumerate() {
         for (index2, (pos2, mass2)) in izip!(poss, masses).enumerate() {
             if index1 == index2 {
                 continue;
             }
-            interact_gravity(pos1, *mass1, &mut acc, pos2, *mass2);
+            let diff = *pos2 - *pos1;
+            *tau1 += (mass2 / diff.length_squared()) * diff.normalize();
         }
     }
-    let radiuss = (Vector::from_elem(poss.raw_dim(), baricenter) - poss).mapv(|delta| delta.length());
-    let other_mass = ((accs.mapv(|acc| acc.length()) * &radiuss * &radiuss) / GRAVITY_CONSTANT).mapv(|mass| mass.abs());
-    let vels_magnintude = (((other_mass + masses) / radiuss) * GRAVITY_CONSTANT).mapv(|vel| vel.powf(0.5));
-    let vels = (Vector::from_elem(poss.raw_dim(), baricenter) - poss).mapv(|delta| delta.normalize());
+    println!("tau {:?}", tau);
+    let dir = Vector::from_elem(poss.raw_dim(), baricenter) - poss;
+    let r_sq = dir.mapv(|d| d.length_squared());
+    let r = dir.mapv(|d| d.length());
+    // TODO check if only one element in tau vector is nonzero, otherwise panic
+    let other_mass = &r_sq * tau.map(|v| v.length());
+    println!("other_mass: {:?}", other_mass);
+    let vels_magnintude = ((masses + other_mass) / &r) * GRAVITY_CONSTANT;
+    let vels = dir.mapv(|delta| delta.normalize());
     let mut vels = vels * &vels_magnintude;
     let rotation = Quat::from_rotation_z(PI / 2.0);    
     vels.mapv_inplace(|vel| rotation * vel);
@@ -100,7 +106,7 @@ fn interact_gravity(
     // cb2.acc -= force_unit_mass * consts1.mass;
     let delta = *pos2 - *pos1;
     let length_sq = delta.length_squared();
-    let force_dir = delta;
+    let force_dir = delta; // TODO should be normalized
     let force = force_dir * GRAVITY_CONSTANT * (mass1 * mass2) / length_sq;
     *acc1 += force / mass1;
 }

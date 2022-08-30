@@ -148,10 +148,10 @@ fn update_setup(
 
         let poss = Vector::from_iter(celestial_bodies.iter().map(|body| body.pos)); 
         let masses = Vector::from_iter(celestial_bodies.iter().map(|body| body.mass)); 
-        // let vels = calculate_circular_orbit_velocity(&poss, &masses); 
-        // for (mut body, vel) in izip!(&mut celestial_bodies.into_iter(), vels) {
-        //     body.velocity = vel;
-        // }
+        let vels = calculate_circular_orbit_velocity(&poss, &masses); 
+        for (mut body, vel) in izip!(&mut celestial_bodies.into_iter(), vels) {
+            body.velocity = vel;
+        }
 
         for celestial_body in celestial_bodies {
             celestial_body.spawn(mesh.clone(), &mut materials, &mut commands);
