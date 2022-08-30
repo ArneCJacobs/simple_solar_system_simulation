@@ -9,7 +9,8 @@ use bevy_inspector_egui::widgets::InspectorQuery;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
-use physics::{DELTA_TIME, PredictedPath, CelestialBody};
+use itertools::izip;
+use physics::{DELTA_TIME, PredictedPath, CelestialBody, Vector, calculate_circular_orbit_velocity};
 use star_config::StarConfig;
 
 mod star_config;
@@ -29,6 +30,7 @@ const LABEL: &str = "my_fixed_timestep";
 fn main() {
     App::new()
         .add_startup_system(setup)
+        .add_startup_system(update_setup)
         .add_plugins(DefaultPlugins)
         .add_plugin(DebugLinesPlugin::with_depth_test(true))
         // .add_plugin(WorldInspectorPlugin::new())
@@ -46,7 +48,6 @@ fn main() {
             ..default()
         })
         .add_system(ui_system)
-        .add_startup_system(update_setup)
         .add_system(physics::estimate_paths)
         .add_system(draw_paths)
         .add_stage_after(
@@ -140,13 +141,21 @@ fn update_setup(
 
     planets.for_each(|entity| commands.entity(entity).despawn());
 
-    let result = serde_json::from_str::<Vec<StarConfig>>(&config);
-    if let Ok(celestial_bodies) = &result {
+    let mut result = serde_json::from_str::<Vec<StarConfig>>(&config);
+    if let Err(err) = result {
+        println!("{}", err);
+    } else if let Ok(celestial_bodies) = &mut result {
+
+        let poss = Vector::from_iter(celestial_bodies.iter().map(|body| body.pos)); 
+        let masses = Vector::from_iter(celestial_bodies.iter().map(|body| body.mass)); 
+        // let vels = calculate_circular_orbit_velocity(&poss, &masses); 
+        // for (mut body, vel) in izip!(&mut celestial_bodies.into_iter(), vels) {
+        //     body.velocity = vel;
+        // }
+
         for celestial_body in celestial_bodies {
             celestial_body.spawn(mesh.clone(), &mut materials, &mut commands);
         }
-    } else if let Err(err) = result {
-        println!("{}", err);
     }
 
 }

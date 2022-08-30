@@ -4,14 +4,14 @@ use serde::Deserialize;
 use crate::physics::{Star, CelestialBody};
 use crate::BodyBundle;
 
-#[derive(Deserialize, Debug, Inspectable)]
+#[derive(Deserialize, Debug, Inspectable, Copy, Clone)]
 pub struct StarConfig {
     #[inspectable(min=100.0)]
-    mass: f32,
+    pub mass: f32,
     #[inspectable(min=0.1)]
     radius: f32,
-    velocity: Vec3,
-    pos: Vec3,
+    pub velocity: Vec3,
+    pub pos: Vec3,
     color: [u8; 3],
     star: Option<bool>,
 }
