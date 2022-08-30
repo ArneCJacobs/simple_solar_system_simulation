@@ -32,6 +32,7 @@ fn main() {
         .add_startup_system(setup)
         .add_startup_system(update_setup)
         .add_plugins(DefaultPlugins)
+        .add_system(look_at_star)
         .add_plugin(DebugLinesPlugin::with_depth_test(true))
         // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(EguiPlugin)
@@ -69,6 +70,7 @@ pub struct Settings {
     pub trail_length: u64,
     #[inspectable(min = 1)]
     pub trail_interval: u64,
+    pub center_planet: Option<Entity>,
 }
 
 impl Default for Settings {
@@ -77,7 +79,26 @@ impl Default for Settings {
             play: false,
             trail_length: 10_00,
             trail_interval: 10,
+            center_planet: None,
         }
+    }
+}
+
+fn look_at_star(
+    mut camera: Query<&mut Transform, With<MainCamera>>,
+    settings: Res<Settings>,
+    stars: Query<&Transform, (With<CelestialBody>, Without<MainCamera>)>,
+) {
+    let mut camera = camera.single_mut();
+    // let star = star.single();
+    if let Some(star) = settings.center_planet {
+        let star_pos = stars.get(star).unwrap();
+        let new_rotation = camera
+            .looking_at(star_pos.translation, Vec3::Y)
+            .rotation
+            .lerp(camera.rotation, 0.1);
+        camera.rotation = new_rotation;
+
     }
 }
 
@@ -88,6 +109,8 @@ fn ui_system(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
+    planets: Query<Entity, With<CelestialBody>>,
+    mut settings: ResMut<Settings>,
 ) {
 
     let mesh = meshes.add(Mesh::from(shape::Icosphere {
@@ -97,10 +120,18 @@ fn ui_system(
 
     egui::Window::new(" ").show(egui_context.ctx_mut(), |ui| {
         if ui.button("Spawn new planet").clicked() {
-            new_planet.spawn(mesh, &mut materials, &mut commands);
+            new_planet.spawn(mesh.clone(), &mut materials, &mut commands);
             // *new_planet = StarConfig::default();
             // commands.spawn_bundle(new_planet.) 
         };
+    });
+
+    egui::Window::new("Select center planet").show(egui_context.ctx_mut(), |ui| {
+        for planet in &planets {
+            if ui.button(format!("{:?}", planet)).clicked() {
+                settings.center_planet = Some(planet);
+            }
+        }
     });
 }
 
@@ -146,12 +177,12 @@ fn update_setup(
         println!("{}", err);
     } else if let Ok(celestial_bodies) = &mut result {
 
-        let poss = Vector::from_iter(celestial_bodies.iter().map(|body| body.pos)); 
-        let masses = Vector::from_iter(celestial_bodies.iter().map(|body| body.mass)); 
-        let vels = calculate_circular_orbit_velocity(&poss, &masses); 
-        for (mut body, vel) in izip!(&mut celestial_bodies.into_iter(), vels) {
-            body.velocity = vel;
-        }
+        // let poss = Vector::from_iter(celestial_bodies.iter().map(|body| body.pos)); 
+        // let masses = Vector::from_iter(celestial_bodies.iter().map(|body| body.mass)); 
+        // let vels = calculate_circular_orbit_velocity(&poss, &masses); 
+        // for (mut body, vel) in izip!(&mut celestial_bodies.into_iter(), vels) {
+        //     body.velocity = vel;
+        // }
 
         for celestial_body in celestial_bodies {
             celestial_body.spawn(mesh.clone(), &mut materials, &mut commands);
@@ -159,6 +190,9 @@ fn update_setup(
     }
 
 }
+
+#[derive(Component)]
+struct MainCamera;
 
 fn setup(
     mut commands: Commands,
@@ -169,22 +203,41 @@ fn setup(
         ..default()
     })
         .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
-        .insert(bevy_transform_gizmo::GizmoPickSource::default());
+        .insert(bevy_transform_gizmo::GizmoPickSource::default())
+        .insert(MainCamera);
 }
 
 
 fn draw_paths(
     mut lines: ResMut<DebugLines>,
-    query: Query<&PredictedPath>,
+    query: Query<(Entity, &PredictedPath, &Transform)>,
+    settings: Res<Settings>,
 ) {
-    for path in &query {
-        for i in 1..path.pos_vec.len() {
-            lines.line(
-                path.pos_vec[i-1],
-                path.pos_vec[i],
-                0.
-            );
-        } 
-    }
+    if let Some(centered_star_entity) = settings.center_planet {
+        let (_, center_path, center_transform) = query.get(centered_star_entity).unwrap();
 
+        for (entity, path, _) in &query {
+            if entity == centered_star_entity {
+                continue;
+            }
+            for i in 1..path.pos_vec.len() {
+                lines.line(
+                    path.pos_vec[i-1] - center_path.pos_vec[i-1] + center_transform.translation,
+                    path.pos_vec[i] - center_path.pos_vec[i] + center_transform.translation,
+                    0.0
+                );
+            } 
+        }
+
+    } else {
+        for (_, path, _) in &query {
+            for i in 1..path.pos_vec.len() {
+                lines.line(
+                    path.pos_vec[i-1],
+                    path.pos_vec[i],
+                    0.
+                );
+            } 
+        }
+    }
 }

@@ -8,8 +8,7 @@ use std::{iter::zip, f32::consts::PI};
 
 
 const GRAVITY_CONSTANT: f32 = 0.01;
-// pub const DELTA_TIME: f64 = 0.0005;
-pub const DELTA_TIME: f64 = 0.0001;
+pub const DELTA_TIME: f64 = 0.0005;
 
 pub fn calculate_circular_orbit_velocity(poss: &Vector<Vec3>, masses: &Vector<f32>) -> Vector<Vec3> {
     let mut baricenter = Vec3::ZERO; 
