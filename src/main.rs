@@ -1,10 +1,13 @@
 #![feature(trait_alias)]
 
+use std::collections::VecDeque;
 use std::{env, fs};
 
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
 use bevy_egui::EguiPlugin;
+use bevy_egui::egui::plot::PlotPoints;
+use bevy_inspector_egui::egui::plot::{Line, Legend, Plot, Values};
 use bevy_inspector_egui::widgets::InspectorQuery;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
@@ -71,6 +74,7 @@ pub struct Settings {
     #[inspectable(min = 1)]
     pub trail_interval: u64,
     pub center_planet: Option<Entity>,
+    pub energy_history_length: usize,
 }
 
 impl Default for Settings {
@@ -80,6 +84,7 @@ impl Default for Settings {
             trail_length: 10_00,
             trail_interval: 10,
             center_planet: None,
+            energy_history_length: 100,
         }
     }
 }
@@ -111,6 +116,7 @@ fn ui_system(
     mut meshes: ResMut<Assets<Mesh>>,
     planets: Query<(Entity, &CelestialBody, &Transform)>,
     mut settings: ResMut<Settings>,
+    mut energy_history: Local<VecDeque<(f32, f32, f32)>>,
 ) {
 
     let mesh = meshes.add(Mesh::from(shape::Icosphere {
@@ -127,7 +133,7 @@ fn ui_system(
     });
 
     egui::Window::new("Select center planet").show(egui_context.ctx_mut(), |ui| {
-        for (planet, cb, tr) in &planets {
+        for (planet, _cb, _tr) in &planets {
             if ui.button(format!("{:?}", planet)).clicked() {
                 settings.center_planet = Some(planet);
             }
@@ -143,10 +149,44 @@ fn ui_system(
         let mut pe = 0.0;
         for [(_, cb1, pos1), (_, cb2, pos2)] in planets.iter_combinations() {
             let diff = pos2.translation - pos1.translation;
-            pe += GRAVITY_CONSTANT * cb1.mass * cb2.mass / diff.length(); 
+            pe -= GRAVITY_CONSTANT * cb1.mass * cb2.mass / diff.length(); 
         }
-        ui.label(format!("KE: {:.2}, PE: {:.2}, TE: {:.2}", ke, pe, ke-pe));
+        if settings.play {
+            energy_history.push_back((ke, pe, ke+pe));
+            if energy_history.len() > settings.energy_history_length {
+                energy_history.pop_front();
+            } 
+        }
+        let plot = Plot::new("Energy history").legend(Legend::default());
+        plot.show(ui, |plot_ui| {
+            plot_ui.line(
+                get_line_from_data(
+                    energy_history.iter().map(|p| p.0).collect::<Vec<f32>>().as_slice(), 
+                    "KE"
+                )
+            );
+
+            plot_ui.line(
+                get_line_from_data(
+                    energy_history.iter().map(|p| p.1).collect::<Vec<f32>>().as_slice(), 
+                    "PE"
+                )
+            );
+
+            plot_ui.line(
+                get_line_from_data(
+                    energy_history.iter().map(|p| p.2).collect::<Vec<f32>>().as_slice(), 
+                    "TE"
+                )
+            );
+        });
+        // ui.label(format!("KE: {:.2}, PE: {:.2}, TE: {:.2}", ke, pe, ke-pe));
     });
+}
+
+fn get_line_from_data(data: &[f32], name: &'_ str) -> Line {
+    let points: Values = Values::from_ys_f32(data);
+    Line::new(points).name(name)
 }
 
 
