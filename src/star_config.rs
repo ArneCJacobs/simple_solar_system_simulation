@@ -1,7 +1,7 @@
 use bevy_inspector_egui::Inspectable;
 use bevy::prelude::*;
 use serde::Deserialize;
-use crate::physics::{Star, CelestialBody};
+use crate::physics::{Star, PointMass};
 use crate::BodyBundle;
 
 #[derive(Deserialize, Debug, Inspectable, Copy, Clone)]
@@ -50,7 +50,7 @@ impl StarConfig {
         };
         let bundle = BodyBundle {
             pbr,
-            celestial_body: CelestialBody {
+            celestial_body: PointMass {
                 mass: self.mass,
                 vel: self.velocity,
                 ..default()

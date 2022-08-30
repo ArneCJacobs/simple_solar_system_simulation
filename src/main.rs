@@ -13,7 +13,7 @@ use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
 use itertools::izip;
-use physics::{DELTA_TIME, PredictedPath, CelestialBody, Vector, calculate_circular_orbit_velocity, GRAVITY_CONSTANT};
+use physics::{DELTA_TIME, PredictedPath, PointMass, Vector, calculate_circular_orbit_velocity, GRAVITY_CONSTANT};
 use star_config::StarConfig;
 
 mod star_config;
@@ -25,7 +25,7 @@ struct FixedUpdateStage;
 
 #[derive(Inspectable, Default)]
 struct Inspector {
-    root_elements: InspectorQuery<&'static mut CelestialBody, &'static mut Transform>,
+    root_elements: InspectorQuery<&'static mut PointMass, &'static mut Transform>,
 }
 
 const LABEL: &str = "my_fixed_timestep";
@@ -41,7 +41,7 @@ fn main() {
         .add_plugin(EguiPlugin)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
         .add_plugin(InspectorPlugin::<Settings>::new())
-        .register_type::<CelestialBody>()
+        .register_type::<PointMass>()
         .add_plugin(InspectorPlugin::<Inspector>::new())
         .insert_resource(ClearColor(Color::BLACK))
         // transform gizmo
@@ -66,33 +66,48 @@ fn main() {
 
 
 
+#[derive(Inspectable, Clone, Copy)]
+pub struct PredictedPathSettings {
+    #[inspectable(min = 1)]
+    pub length: u64,
+    #[inspectable(min = 1)]
+    pub stride: u64,
+}
+
+impl Default for PredictedPathSettings {
+    fn default() -> Self {
+        PredictedPathSettings {
+            length: 10_00,
+            stride: 10,
+        }
+    }
+}
+
 #[derive(Inspectable)]
 pub struct Settings {
     pub play: bool,
-    #[inspectable(min = 1)]
-    pub trail_length: u64,
-    #[inspectable(min = 1)]
-    pub trail_interval: u64,
+    pub predicted_path_settings: PredictedPathSettings,
     pub center_planet: Option<Entity>,
     pub energy_history_length: usize,
 }
+
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             play: false,
-            trail_length: 10_00,
-            trail_interval: 10,
             center_planet: None,
             energy_history_length: 100,
+            predicted_path_settings: PredictedPathSettings::default(),
         }
     }
 }
 
+
 fn look_at_star(
     mut camera: Query<&mut Transform, With<MainCamera>>,
     settings: Res<Settings>,
-    stars: Query<&Transform, (With<CelestialBody>, Without<MainCamera>)>,
+    stars: Query<&Transform, (With<PointMass>, Without<MainCamera>)>,
 ) {
     let mut camera = camera.single_mut();
     // let star = star.single();
@@ -114,7 +129,7 @@ fn ui_system(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    planets: Query<(Entity, &CelestialBody, &Transform)>,
+    planets: Query<(Entity, &PointMass, &Transform)>,
     mut settings: ResMut<Settings>,
     mut energy_history: Local<VecDeque<(f32, f32, f32)>>,
 ) {
@@ -194,7 +209,7 @@ fn get_line_from_data(data: &[f32], name: &'_ str) -> Line {
 struct BodyBundle {
     #[bundle]
     pbr: PbrBundle,
-    celestial_body: CelestialBody, 
+    celestial_body: PointMass, 
     predicted_path: PredictedPath,
 }
 
@@ -203,7 +218,7 @@ struct LastConfig(String);
 
 fn update_setup(
     mut commands: Commands,
-    planets: Query<Entity, With<CelestialBody>>,
+    planets: Query<Entity, With<PointMass>>,
     mut last_config: Local<LastConfig>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,

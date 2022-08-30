@@ -1,10 +1,10 @@
 use bevy::{prelude::*, ecs::query::WorldQuery};
 use itertools::izip;
-use crate::Settings;
+use crate::{Settings, PredictedPathSettings};
 use bevy_inspector_egui::Inspectable;
 use core::ops::{Add, Mul};
 use ndarray::{Ix1, Array};
-use std::{iter::zip, f32::consts::PI};
+use std::{iter::zip, f32::consts::PI, collections::VecDeque};
 
 
 pub const GRAVITY_CONSTANT: f32 = 0.01;
@@ -47,15 +47,15 @@ pub struct Star;
 
 #[derive(Component, Default, Clone)]
 pub struct PredictedPath {
-    pub pos_vec: Vec<Vec3>
+    pub pos_vec: VecDeque<Vec3>,
+    pub vel_vec: VecDeque<Vec3>,
 }
 
 #[derive(Reflect, Inspectable, Component, Default, Debug, Clone)]
 #[reflect(Component)]
-pub struct CelestialBody {
+pub struct PointMass {
     pub mass: f32,
     pub vel: Vec3, 
-    pub acc: Vec3, 
 }
 
 pub struct Consts {
@@ -64,27 +64,27 @@ pub struct Consts {
 }
 
 
-pub struct CelestialBodyCalcBody {
+pub struct PointMassCalcBody {
     entity: Entity,
-    celestial_body: CelestialBody,
+    point_mass: PointMass,
     pos: Transform,
 }
 
-impl From<&CelestialBodyCalcBody> for Consts {
-    fn from(cb: &CelestialBodyCalcBody) -> Self {
+impl From<&PointMassCalcBody> for Consts {
+    fn from(pmcb: &PointMassCalcBody) -> Self {
         Consts {
-            entity: cb.entity.clone(),
-            mass: cb.celestial_body.mass,
+            entity: pmcb.entity.clone(),
+            mass: pmcb.point_mass.mass,
         } 
     }
 }
 
 
-impl From<CelestialBodyQueryItem<'_>> for CelestialBodyCalcBody {
-   fn from(item: CelestialBodyQueryItem<'_>) -> Self {
-       CelestialBodyCalcBody { 
+impl From<PointMassQueryItem<'_>> for PointMassCalcBody {
+   fn from(item: PointMassQueryItem<'_>) -> Self {
+       PointMassCalcBody { 
            entity: item.entity.clone(), 
-           celestial_body: item.celestial_body.clone(), 
+           point_mass: item.point_mass.clone(), 
            pos: item.pos.clone(),
        }
    } 
@@ -104,14 +104,14 @@ fn interact_gravity(
 
 #[derive(WorldQuery)]
 #[world_query(mutable)]
-pub struct CelestialBodyQuery {
+pub struct PointMassQuery {
     entity: Entity,
-    celestial_body: &'static mut CelestialBody,
+    point_mass: &'static mut PointMass,
     pos: &'static mut Transform, 
 }
 
 pub fn step_system(
-    mut query: Query<CelestialBodyQuery>,
+    mut query: Query<PointMassQuery>,
     settings: Res<Settings>,
     mut time_passed: Local<f32>
 ) {
@@ -122,7 +122,7 @@ pub fn step_system(
     let dt = DELTA_TIME as f32;
 
     *time_passed += dt;
-    let mut bodies: Vec<CelestialBodyCalcBody> = vec![]; 
+    let mut bodies: Vec<PointMassCalcBody> = vec![]; 
 
     for body in &mut query {
         bodies.push(body.into());
@@ -132,45 +132,79 @@ pub fn step_system(
     let (new_poss, new_vels) = system.step(dt, *time_passed);
     for (body, new_pos, new_vel) in izip!(bodies, new_poss, new_vels) {
         let mut query_body = query.get_mut(body.entity).unwrap();
-        query_body.celestial_body.vel = new_vel;
+        query_body.point_mass.vel = new_vel;
         query_body.pos.translation = new_pos;
     }
 }
 
 
 pub fn estimate_paths(
-    mut query: Query<CelestialBodyQuery>,
-    mut paths_query: Query<&mut PredictedPath>,
+    // mut query: Query<CelestialBodyQuery>,
+    mut query: Query<(Entity, &mut PredictedPath, PointMassQuery)>,
     settings: Res<Settings>,
+    mut last_strides: Local<Option<PredictedPathSettings>>,
+    mut counter: Local<u64>,
 ) {
-    let mut bodies: Vec<CelestialBodyCalcBody> = vec![];
+    let mut bodies: Vec<PointMassCalcBody> = vec![];
     let mut paths: Vec<PredictedPath> = vec![];
 
     let dt = DELTA_TIME as f32;
     let time_passed = 0.0; // TODO make time_passed a resource and update it from step_system
 
-    for body in &mut query {
-        bodies.push(body.into());
-        paths.push(PredictedPath{ pos_vec: vec![]});
-    }
+    let re_init = match *last_strides {
+        None => true,
+        Some(last_settings) if last_settings.stride == settings.predicted_path_settings.stride => false,
+        Some(_) => true,
+    };
 
-    let mut system = System::new(&bodies);
+    if re_init {
+        *counter = 0;
 
-    for i in 0..(settings.trail_length * settings.trail_interval) {
-        let (new_poss, _) = system.step(dt, time_passed);
+        for (_, _, body) in &mut query {
+            bodies.push(body.into());
+            paths.push(PredictedPath::default());
+        }
 
-        for (path, new_pos) in zip(&mut paths, new_poss) { 
-            if (i % settings.trail_interval) == 0 {
-                path.pos_vec.push(new_pos);
+
+        let mut system = System::new(&bodies);
+
+        for i in 0..(settings.predicted_path_settings.length * settings.predicted_path_settings.stride) {
+            let (new_poss, _) = system.step(dt, time_passed);
+
+            for (path, new_pos) in zip(&mut paths, new_poss) { 
+                if (i % settings.predicted_path_settings.stride) == 0 {
+                    path.pos_vec.push_back(new_pos);
+                }
             }
         }
+
+    } else {
+        for (entity, predicted_path, body) in &mut query {
+            let last_vel = predicted_path.vel_vec.back().unwrap();
+            let last_pos = predicted_path.pos_vec.back().unwrap();
+            let point_mass_calc = PointMassCalcBody {
+                entity: entity.clone(),
+                point_mass: PointMass { mass: body.point_mass.mass, vel: *last_vel },
+                pos: Transform::from_translation(*last_pos),
+            };
+            // TODO dequeue from of all predicted paths
+            paths.push(predicted_path.clone());
+            bodies.push(point_mass_calc);
+        }
+
+
+
+        let mut system = System::new(&bodies);
+
     }
 
     for (body, path) in zip(&mut bodies, &paths) { 
-        let mut query_path = paths_query.get_mut(body.entity).unwrap();
+        let (_, mut query_path, _) = query.get_mut(body.entity).unwrap();
         query_path.pos_vec.clear();
         query_path.pos_vec.clone_from(&path.pos_vec);
     }
+
+    *last_strides = Some(settings.predicted_path_settings.clone());
 }
 
 
@@ -182,9 +216,9 @@ struct System {
 }
 
 impl System {
-    fn new(bodies: &Vec<CelestialBodyCalcBody>) -> Self {
+    fn new(bodies: &Vec<PointMassCalcBody>) -> Self {
         let pos_vec = Array::from_iter(bodies.iter().map(|body| body.pos.translation));
-        let vel_vec = Array::from_iter(bodies.iter().map(|body| body.celestial_body.vel));
+        let vel_vec = Array::from_iter(bodies.iter().map(|body| body.point_mass.vel));
         let consts_vec = Array::from_iter(bodies.iter().map(|body| body.into()));
         System {
             pos_vec,
