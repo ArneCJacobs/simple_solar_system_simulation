@@ -96,18 +96,11 @@ fn interact_gravity(
     pos1: &Vec3, mass1: f32, acc1: &mut Vec3,
     pos2: &Vec3, mass2: f32,
 ) {
-    // let delta = *pos2 - *pos1;
-    // let distance_sq: f32 = delta.length_squared();
-    // //
-    // let f = GRAVITY_CONSTANT / distance_sq;
-    // let force_unit_mass = delta * f;
-    // *acc1 += force_unit_mass * mass2;
-    // cb2.acc -= force_unit_mass * consts1.mass;
     let delta = *pos2 - *pos1;
     let length_sq = delta.length_squared();
     let force_dir = delta.normalize(); // TODO should be normalized
-    let force = force_dir * GRAVITY_CONSTANT * (mass1 * mass2) / length_sq;
-    *acc1 += force / mass1;
+    let force = force_dir * GRAVITY_CONSTANT * mass2 / length_sq;
+    *acc1 += force;
 }
 
 #[derive(WorldQuery)]
