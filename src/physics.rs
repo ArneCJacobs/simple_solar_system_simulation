@@ -9,6 +9,7 @@ use std::{iter::zip, f32::consts::PI};
 
 pub const GRAVITY_CONSTANT: f32 = 0.01;
 pub const DELTA_TIME: f64 = 0.005;
+pub const SOFTENING: f32 = 0.01;
 
 pub fn calculate_circular_orbit_velocity(poss: &Vector<Vec3>, masses: &Vector<f32>) -> Vector<Vec3> {
     let mut baricenter = Vec3::ZERO; 
@@ -26,13 +27,11 @@ pub fn calculate_circular_orbit_velocity(poss: &Vector<Vec3>, masses: &Vector<f3
             *tau1 += (mass2 / diff.length_squared()) * diff.normalize();
         }
     }
-    println!("tau {:?}", tau);
     let dir = Vector::from_elem(poss.raw_dim(), baricenter) - poss;
     let r_sq = dir.mapv(|d| d.length_squared());
     let r = dir.mapv(|d| d.length());
     // TODO check if only one element in tau vector is nonzero, otherwise panic
     let other_mass = &r_sq * tau.map(|v| v.length());
-    println!("other_mass: {:?}", other_mass);
     let vels_magnintude = ((masses + other_mass) / &r) * GRAVITY_CONSTANT;
     let vels = dir.mapv(|delta| delta.normalize());
     let mut vels = vels * &vels_magnintude;
@@ -97,8 +96,8 @@ fn interact_gravity(
     pos2: &Vec3, mass2: f32,
 ) {
     let delta = *pos2 - *pos1;
-    let length_sq = delta.length_squared();
-    let force_dir = delta.normalize(); // TODO should be normalized
+    let length_sq = delta.length_squared() + SOFTENING.powi(2);
+    let force_dir = delta.normalize(); 
     let force = force_dir * GRAVITY_CONSTANT * mass2 / length_sq;
     *acc1 += force;
 }

@@ -237,7 +237,7 @@ fn update_setup(
         // for (mut body, vel) in izip!(&mut celestial_bodies.into_iter(), vels) {
         //     body.velocity = vel;
         // }
-
+        //
         for celestial_body in celestial_bodies {
             celestial_body.spawn(mesh.clone(), &mut materials, &mut commands);
         }
