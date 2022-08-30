@@ -7,7 +7,7 @@ use bevy::{pbr::AmbientLight, time::FixedTimestep};
 use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::widgets::InspectorQuery;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
-use bevy_egui::{egui, EguiContext};
+use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
 use itertools::izip;
 use physics::{DELTA_TIME, PredictedPath, CelestialBody, Vector, calculate_circular_orbit_velocity};
