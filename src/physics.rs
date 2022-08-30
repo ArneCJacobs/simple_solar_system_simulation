@@ -105,7 +105,7 @@ fn interact_gravity(
     // cb2.acc -= force_unit_mass * consts1.mass;
     let delta = *pos2 - *pos1;
     let length_sq = delta.length_squared();
-    let force_dir = delta; // TODO should be normalized
+    let force_dir = delta.normalize(); // TODO should be normalized
     let force = force_dir * GRAVITY_CONSTANT * (mass1 * mass2) / length_sq;
     *acc1 += force / mass1;
 }
