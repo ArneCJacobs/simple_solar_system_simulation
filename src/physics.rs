@@ -93,7 +93,7 @@ impl From<PointMassQueryItem<'_>> for PointMassCalcBody {
 
 
 fn interact_gravity(
-    pos1: &Vec3, mass1: f32, acc1: &mut Vec3,
+    pos1: &Vec3, _mass1: f32, acc1: &mut Vec3,
     pos2: &Vec3, mass2: f32,
 ) {
     let delta = *pos2 - *pos1;
@@ -325,7 +325,7 @@ where
 
 trait Integrator<Num> = for<'a> Fn(f32, &'a Num, &'a Num) -> Num;  
 
-// TODO make this interface a trait or type
+#[allow(dead_code)]
 fn runge_kutta_4_nystorm<F, Num>(
     f: F, h: f32 /* dt */,  t0: f32, y0: &Num, dy0: &Num
 ) -> (Num, Num)

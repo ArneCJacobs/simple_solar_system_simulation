@@ -1,10 +1,8 @@
-use bevy::input::ButtonState;
-use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel,MouseMotion};
 use bevy::render::camera::Projection;
 use bevy_inspector_egui::bevy_egui::EguiContext;
-use crate::{Settings, FocusedEnity};
+use crate::FocusedEnity;
 use crate::physics::PointMass;
 
 
@@ -192,6 +190,7 @@ pub fn get_primary_window_size(windows: &Res<Windows>) -> Vec2 {
 
 /// Spawn a camera like this
 pub fn spawn_camera(mut commands: Commands) {
+    println!("spawning camera");
     let translation = Vec3::new(0.0, 10.5, -30.0);
     let radius = translation.length();
 

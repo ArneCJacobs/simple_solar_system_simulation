@@ -50,7 +50,7 @@ fn main() {
         .add_plugins(bevy_mod_picking::DefaultPickingPlugins)
         .add_plugin(bevy_transform_gizmo::TransformGizmoPlugin::default())
         .insert_resource(AmbientLight {
-            brightness: 0.03,
+            brightness: 0.09,
             ..default()
         })
         .add_system(ui_system)
@@ -139,7 +139,7 @@ fn ui_system(
         }
     });
 
-    egui::Window::new("stats").show(egui_context.ctx_mut(), |ui| {
+    egui::Window::new("Energy history plot").show(egui_context.ctx_mut(), |ui| {
         let mut ke = 0.0;
         for (_, planet, _) in &planets {
             ke += 0.5 * planet.mass * planet.vel.length() * planet.vel.length();
@@ -253,7 +253,6 @@ fn update_setup(
 fn draw_paths(
     mut lines: ResMut<DebugLines>,
     query: Query<(Entity, &PredictedPath, &Transform)>,
-    settings: Res<Settings>,
     focused_entity: Res<FocusedEnity>,
 ) {
     if let Some(centered_star_entity) = focused_entity.0 {
