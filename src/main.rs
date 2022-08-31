@@ -1,4 +1,5 @@
 #![feature(trait_alias)]
+#![feature(let_chains)]
 
 use std::collections::VecDeque;
 use std::{env, fs};
@@ -11,7 +12,7 @@ use bevy_inspector_egui::widgets::InspectorQuery;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
-use physics::{DELTA_TIME, PredictedPath, PointMass,GRAVITY_CONSTANT};
+use physics::{DELTA_TIME, PredictedPath, PointMass,GRAVITY_CONSTANT, PointsChanged};
 use star_config::StarConfig;
 
 mod star_config;
@@ -54,25 +55,24 @@ fn main() {
             brightness: 0.03,
             ..default()
         })
-        .add_system(ui_system)
-        .add_system(physics::estimate_paths)
+        // .add_system(ui_system)
         .add_system(draw_paths)
+        .add_system(bevy::window::close_on_esc)
         .add_stage_after(
             CoreStage::Update,
             FixedUpdateStage,
             SystemStage::single_threaded()
                 .with_run_criteria(FixedTimestep::step(DELTA_TIME).with_label(LABEL))
                 .with_system(physics::step_system)
+                .with_system(physics::estimate_paths)
         )
         .run();
 }
 
-
-
 #[derive(Inspectable, Clone, Copy)]
 pub struct PredictedPathSettings {
     #[inspectable(min = 1)]
-    pub length: u64,
+    pub length: usize,
     #[inspectable(min = 1)]
     pub stride: u64,
 }
@@ -80,7 +80,7 @@ pub struct PredictedPathSettings {
 impl Default for PredictedPathSettings {
     fn default() -> Self {
         PredictedPathSettings {
-            length: 10_00,
+            length: 100,
             stride: 10,
         }
     }
@@ -210,6 +210,7 @@ fn update_setup(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     commands.insert_resource(FocusedEnity::default());
+    commands.insert_resource(PointsChanged(false));
 
     let args: Vec<String> = env::args().collect();
     let config = fs::read_to_string(args.get(1).expect("Please give a file with the initial conditions")) // TODO configurable path

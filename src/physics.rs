@@ -110,11 +110,22 @@ pub struct PointMassQuery {
     pos: &'static mut Transform, 
 }
 
+// when the positions or velocity of the points were changed by something other then 'step_system'
+pub struct PointsChanged(pub bool);
+
 pub fn step_system(
     mut query: Query<PointMassQuery>,
     settings: Res<Settings>,
-    mut time_passed: Local<f32>
+    mut time_passed: Local<f32>,
+    mut points_changed: ResMut<PointsChanged>,
 ) {
+
+    for body in &mut query {
+        if body.pos.is_changed() || body.point_mass.is_changed() {
+            points_changed.0 = true;
+        }
+    }
+
     if !settings.play {
         return;
     }
@@ -144,18 +155,35 @@ pub fn estimate_paths(
     settings: Res<Settings>,
     mut last_strides: Local<Option<PredictedPathSettings>>,
     mut counter: Local<u64>,
+    mut points_changed: ResMut<PointsChanged>,
 ) {
+    if settings.play {
+        *counter += 1;
+    }
     let mut bodies: Vec<PointMassCalcBody> = vec![];
     let mut paths: Vec<PredictedPath> = vec![];
 
     let dt = DELTA_TIME as f32;
     let time_passed = 0.0; // TODO make time_passed a resource and update it from step_system
 
-    let re_init = match *last_strides {
+    let mut re_init = match *last_strides {
         None => true,
         Some(last_settings) if last_settings.stride == settings.predicted_path_settings.stride => false,
         Some(_) => true,
     };
+    if points_changed.0 { 
+        re_init = true;
+        points_changed.0 = false;
+    }
+
+    // let mut iterator = query.iter_mut();
+    // while let Some((_, path, body)) = iterator.next() && !re_init {
+    //     let first_vel = path.vel_vec.front().unwrap();
+    //     let first_pos = path.pos_vec.front().unwrap();
+    //     let diff_vel = (body.point_mass.vel - *first_vel).length_squared(); 
+    //     let diff_pos = (body.pos.translation - *first_pos).length_squared(); 
+    //     re_init = diff_vel > 0.0001 || diff_pos > 0.0001;    
+    // }
 
     if re_init {
         *counter = 0;
@@ -168,7 +196,7 @@ pub fn estimate_paths(
 
         let mut system = System::new(&bodies);
 
-        for i in 0..(settings.predicted_path_settings.length * settings.predicted_path_settings.stride) {
+        for i in 0..(settings.predicted_path_settings.length as u64 * settings.predicted_path_settings.stride) {
             let (new_poss, new_vels) = system.step(dt, time_passed);
 
             for (path, new_pos, new_vel) in izip!(&mut paths, new_poss, new_vels) { 
@@ -179,7 +207,7 @@ pub fn estimate_paths(
             }
         }
 
-    } else {
+    } else if settings.play {
         for (entity, predicted_path, body) in &mut query {
             let last_vel = predicted_path.vel_vec.back().unwrap();
             let last_pos = predicted_path.pos_vec.back().unwrap();
@@ -188,15 +216,46 @@ pub fn estimate_paths(
                 point_mass: PointMass { mass: body.point_mass.mass, vel: *last_vel },
                 pos: Transform::from_translation(*last_pos),
             };
-            // TODO dequeue from of all predicted paths
-            paths.push(predicted_path.clone());
+            let mut path = predicted_path.clone();
+            if (*counter % settings.predicted_path_settings.stride) == 0 {
+                path.vel_vec.pop_front();
+                path.pos_vec.pop_front();
+            } 
+            else {
+                // update the first point in the path so that the path always starts correctely
+                *path.vel_vec.get_mut(0).unwrap() = body.point_mass.vel;
+                *path.pos_vec.get_mut(0).unwrap() = body.pos.translation;
+            }
+            paths.push(path);
             bodies.push(point_mass_calc);
         }
+        let current_length = paths[0].pos_vec.len();
+        let required_length = settings.predicted_path_settings.length;
 
+        // if the current path length is smaller or equal, add new prediction at the end until the length requiredment is met
+        if current_length <= required_length {
+            let diff = required_length - current_length;
+            if (*counter % settings.predicted_path_settings.stride) == 0 {
+                let mut system = System::new(&bodies);
+                for i in 1..=(settings.predicted_path_settings.stride * diff as u64) {
+                    let (new_poss, new_vels) = system.step(dt, time_passed);
 
+                    if (i % settings.predicted_path_settings.stride) == 0 {
+                        for (path, new_pos, new_vel) in izip!(&mut paths, new_poss, new_vels) { 
+                            path.pos_vec.push_back(new_pos);
+                            path.vel_vec.push_back(new_vel);
+                        }
+                    }
+                }
+            }
 
-        let mut system = System::new(&bodies);
-
+        } else {
+            // if the path is longer then it needs to be, just truncate the current predictions
+            for path in &mut paths {
+                path.vel_vec.truncate(required_length); 
+                path.pos_vec.truncate(required_length); 
+            }
+        }
     }
 
     for (body, path) in zip(&mut bodies, &paths) { 
