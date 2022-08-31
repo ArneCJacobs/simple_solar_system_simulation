@@ -80,7 +80,7 @@ impl StarConfig {
                     p.spawn_bundle(PointLightBundle {
                         point_light: PointLight {
                             color,
-                            intensity: 40000.0,
+                            intensity: 4000.0,
                             range: 1000.0,
                             radius: self.radius+0.001,
                             ..default()

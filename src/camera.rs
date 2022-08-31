@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel,MouseMotion};
 use bevy::render::camera::Projection;
 use bevy_inspector_egui::bevy_egui::EguiContext;
+use bevy_transform_gizmo::InternalGizmoCamera;
 use crate::FocusedEnity;
 use crate::physics::PointMass;
 
@@ -65,9 +66,6 @@ pub fn pan_orbit_camera(
         Some(mut egui_context) => egui_context.ctx_mut().is_pointer_over_area(),
         None => false,
     };
-    if hovering_over_egui {
-        return;
-    }
     // change input mapping for orbit and panning here
     let orbit_button = MouseButton::Right;
     let pan_button = MouseButton::Middle;
@@ -77,21 +75,23 @@ pub fn pan_orbit_camera(
     let mut scroll = 0.0;
     let mut orbit_button_changed = false;
 
-    if input_mouse.pressed(orbit_button) {
-        for ev in ev_motion.iter() {
-            rotation_move += ev.delta;
+    if !hovering_over_egui {
+        if input_mouse.pressed(orbit_button) {
+            for ev in ev_motion.iter() {
+                rotation_move += ev.delta;
+            }
+        } else if input_mouse.pressed(pan_button) {
+            // Pan only if we're not rotating at the moment
+            for ev in ev_motion.iter() {
+                pan += ev.delta;
+            }
         }
-    } else if input_mouse.pressed(pan_button) {
-        // Pan only if we're not rotating at the moment
-        for ev in ev_motion.iter() {
-            pan += ev.delta;
+        for ev in ev_scroll.iter() {
+            scroll += ev.y;
         }
-    }
-    for ev in ev_scroll.iter() {
-        scroll += ev.y;
-    }
-    if input_mouse.just_released(orbit_button) || input_mouse.just_pressed(orbit_button) {
-        orbit_button_changed = true;
+        if input_mouse.just_released(orbit_button) || input_mouse.just_pressed(orbit_button) {
+            orbit_button_changed = true;
+        }
     }
 
     for (mut pan_orbit, mut transform, projection) in query.iter_mut() {
@@ -194,15 +194,34 @@ pub fn spawn_camera(mut commands: Commands) {
     let translation = Vec3::new(0.0, 10.5, -30.0);
     let radius = translation.length();
 
-    commands.spawn_bundle(Camera3dBundle {
+    let mut command = commands.spawn_bundle(Camera3dBundle {
         transform: Transform::from_translation(translation)
             .looking_at(Vec3::ZERO, Vec3::Y),
         ..Default::default()
-    }).insert(PanOrbitCamera {
-        radius,
-        ..Default::default()
-    })
+    });
+
+    command
+        .insert(PanOrbitCamera {
+            radius,
+            ..Default::default()
+        })
         .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
         .insert(bevy_transform_gizmo::GizmoPickSource::default())
         .insert(MainCamera);
+}
+
+pub fn test(
+    mut commands: Commands,
+    mut query_what: Query<(Entity, &InternalGizmoCamera), (With<Camera>, Without<MainCamera>)>,
+    mut query: Query<Entity, (With<Camera>, With<MainCamera>)>
+) {
+    // if query_what.is_empty() {
+    //     return;
+    // }
+    // let (camera_wierd, comp) = query_what.get_single_mut().unwrap(); 
+    // let mut camera = query.get_single_mut().unwrap();
+    // commands.entity(camera).insert(comp.clone());
+    // commands.entity(camera_wierd).despawn();
+    // println!("{:?}", camera);
+    // println!("{:?}", camera_wierd);
 }

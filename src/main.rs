@@ -8,7 +8,8 @@ use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
 use bevy_inspector_egui::egui::plot::{Line, Legend, Plot, Values};
 use bevy_inspector_egui::widgets::InspectorQuery;
-use bevy_inspector_egui::{Inspectable, InspectorPlugin};
+#[allow(unused_imports)]
+use bevy_inspector_egui::{Inspectable, InspectorPlugin, WorldInspectorPlugin};
 use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
 use physics::{DELTA_TIME, PredictedPath, PointMass,GRAVITY_CONSTANT, PointsChanged};
@@ -18,7 +19,7 @@ mod star_config;
 mod physics;
 mod camera;
 
-use camera::{set_focus_camera, pan_orbit_camera, spawn_camera};
+use camera::{set_focus_camera, pan_orbit_camera};
 
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
@@ -38,9 +39,10 @@ fn main() {
         .add_plugin(DebugLinesPlugin::with_depth_test(true))
         // .add_plugin(WorldInspectorPlugin::new())
         // camera
-        .add_startup_system(spawn_camera)
+        .add_startup_system(camera::spawn_camera)
         .add_system(set_focus_camera.before(pan_orbit_camera))
         .add_system(pan_orbit_camera)
+        .add_system(camera::test)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
         .add_plugin(InspectorPlugin::<Settings>::new())
         .register_type::<PointMass>()
