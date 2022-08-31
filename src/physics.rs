@@ -7,7 +7,7 @@ use std::{iter::zip, f32::consts::PI, collections::VecDeque};
 use crate::integration::velocity_verlet::velocity_verlet_generic;
 
 pub const GRAVITY_CONSTANT: f32 = 0.01;
-pub const DELTA_TIME: f64 = 0.005;
+pub const DELTA_TIME: f64 = 0.001;
 pub const SOFTENING: f32 = 0.10;
 
 #[allow(dead_code)]
