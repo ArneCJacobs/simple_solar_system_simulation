@@ -6,18 +6,19 @@ use std::{env, fs};
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
 use bevy_egui::EguiPlugin;
-use bevy_egui::egui::plot::PlotPoints;
 use bevy_inspector_egui::egui::plot::{Line, Legend, Plot, Values};
 use bevy_inspector_egui::widgets::InspectorQuery;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
 use bevy_inspector_egui::bevy_egui::{egui, EguiContext};
 use bevy_prototype_debug_lines::*;
-use itertools::izip;
-use physics::{DELTA_TIME, PredictedPath, PointMass, Vector, calculate_circular_orbit_velocity, GRAVITY_CONSTANT};
+use physics::{DELTA_TIME, PredictedPath, PointMass,GRAVITY_CONSTANT};
 use star_config::StarConfig;
 
 mod star_config;
 mod physics;
+mod camera;
+
+use camera::{set_focus_camera, pan_orbit_camera, spawn_camera};
 
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
@@ -32,13 +33,15 @@ const LABEL: &str = "my_fixed_timestep";
 
 fn main() {
     App::new()
-        .add_startup_system(setup)
         .add_startup_system(update_setup)
         .add_plugins(DefaultPlugins)
-        .add_system(look_at_star)
         .add_plugin(DebugLinesPlugin::with_depth_test(true))
         // .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(EguiPlugin)
+        // camera
+        .add_startup_system(spawn_camera)
+        .add_system(set_focus_camera.before(pan_orbit_camera))
+        .add_system(pan_orbit_camera)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
         .add_plugin(InspectorPlugin::<Settings>::new())
         .register_type::<PointMass>()
@@ -83,11 +86,13 @@ impl Default for PredictedPathSettings {
     }
 }
 
+#[derive(Default)]
+pub struct FocusedEnity(Option<Entity>);
+
 #[derive(Inspectable)]
 pub struct Settings {
     pub play: bool,
     pub predicted_path_settings: PredictedPathSettings,
-    pub center_planet: Option<Entity>,
     pub energy_history_length: usize,
 }
 
@@ -96,32 +101,11 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             play: false,
-            center_planet: None,
             energy_history_length: 100,
             predicted_path_settings: PredictedPathSettings::default(),
         }
     }
 }
-
-
-fn look_at_star(
-    mut camera: Query<&mut Transform, With<MainCamera>>,
-    settings: Res<Settings>,
-    stars: Query<&Transform, (With<PointMass>, Without<MainCamera>)>,
-) {
-    let mut camera = camera.single_mut();
-    // let star = star.single();
-    if let Some(star) = settings.center_planet {
-        let star_pos = stars.get(star).unwrap();
-        let new_rotation = camera
-            .looking_at(star_pos.translation, Vec3::Y)
-            .rotation
-            .lerp(camera.rotation, 0.1);
-        camera.rotation = new_rotation;
-
-    }
-}
-
 
 fn ui_system(
     mut egui_context: ResMut<EguiContext>, 
@@ -130,8 +114,9 @@ fn ui_system(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
     planets: Query<(Entity, &PointMass, &Transform)>,
-    mut settings: ResMut<Settings>,
+    settings: ResMut<Settings>,
     mut energy_history: Local<VecDeque<(f32, f32, f32)>>,
+    mut focused_entity: ResMut<FocusedEnity>,
 ) {
 
     let mesh = meshes.add(Mesh::from(shape::Icosphere {
@@ -142,16 +127,17 @@ fn ui_system(
     egui::Window::new(" ").show(egui_context.ctx_mut(), |ui| {
         if ui.button("Spawn new planet").clicked() {
             new_planet.spawn(mesh.clone(), &mut materials, &mut commands);
-            // *new_planet = StarConfig::default();
-            // commands.spawn_bundle(new_planet.) 
         };
     });
 
     egui::Window::new("Select center planet").show(egui_context.ctx_mut(), |ui| {
         for (planet, _cb, _tr) in &planets {
             if ui.button(format!("{:?}", planet)).clicked() {
-                settings.center_planet = Some(planet);
+                focused_entity.0 = Some(planet);
             }
+        }
+        if ui.button("Clear").clicked() {
+            focused_entity.0 = None;
         }
     });
 
@@ -223,6 +209,8 @@ fn update_setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
+    commands.insert_resource(FocusedEnity::default());
+
     let args: Vec<String> = env::args().collect();
     let config = fs::read_to_string(args.get(1).expect("Please give a file with the initial conditions")) // TODO configurable path
         .expect("Could not read file");
@@ -260,33 +248,17 @@ fn update_setup(
 
 }
 
-#[derive(Component)]
-struct MainCamera;
-
-fn setup(
-    mut commands: Commands,
-) {
-    // camera
-    commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 10.5, -30.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    })
-        .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
-        .insert(bevy_transform_gizmo::GizmoPickSource::default())
-        .insert(MainCamera);
-}
-
-
 fn draw_paths(
     mut lines: ResMut<DebugLines>,
     query: Query<(Entity, &PredictedPath, &Transform)>,
     settings: Res<Settings>,
+    focused_entity: Res<FocusedEnity>,
 ) {
-    if let Some(centered_star_entity) = settings.center_planet {
-        let (_, center_path, center_transform) = query.get(centered_star_entity).unwrap();
+    if let Some(centered_star_entity) = focused_entity.0 {
+        let (_, center_path, center_transform) = query.get(centered_star_entity.into()).unwrap();
 
         for (entity, path, _) in &query {
-            if entity == centered_star_entity {
+            if entity == centered_star_entity.into() {
                 continue;
             }
             for i in 1..path.pos_vec.len() {

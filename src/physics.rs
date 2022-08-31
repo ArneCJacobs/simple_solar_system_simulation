@@ -169,11 +169,12 @@ pub fn estimate_paths(
         let mut system = System::new(&bodies);
 
         for i in 0..(settings.predicted_path_settings.length * settings.predicted_path_settings.stride) {
-            let (new_poss, _) = system.step(dt, time_passed);
+            let (new_poss, new_vels) = system.step(dt, time_passed);
 
-            for (path, new_pos) in zip(&mut paths, new_poss) { 
+            for (path, new_pos, new_vel) in izip!(&mut paths, new_poss, new_vels) { 
                 if (i % settings.predicted_path_settings.stride) == 0 {
                     path.pos_vec.push_back(new_pos);
+                    path.vel_vec.push_back(new_vel);
                 }
             }
         }
@@ -201,7 +202,9 @@ pub fn estimate_paths(
     for (body, path) in zip(&mut bodies, &paths) { 
         let (_, mut query_path, _) = query.get_mut(body.entity).unwrap();
         query_path.pos_vec.clear();
+        query_path.vel_vec.clear();
         query_path.pos_vec.clone_from(&path.pos_vec);
+        query_path.vel_vec.clone_from(&path.vel_vec);
     }
 
     *last_strides = Some(settings.predicted_path_settings.clone());
