@@ -1,3 +1,5 @@
+use bevy::input::ButtonState;
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel,MouseMotion};
 use bevy::render::camera::Projection;
@@ -56,6 +58,7 @@ pub fn pan_orbit_camera(
     mut ev_scroll: EventReader<MouseWheel>,
     input_mouse: Res<Input<MouseButton>>,
     mut query: Query<(&mut PanOrbitCamera, &mut Transform, &Projection)>,
+    mut input_keyboard: Res<Input<KeyCode>>,
 ) {
     // change input mapping for orbit and panning here
     let orbit_button = MouseButton::Right;
@@ -134,6 +137,39 @@ pub fn pan_orbit_camera(
             // child = z-offset
             let rot_matrix = Mat3::from_quat(transform.rotation);
             transform.translation = pan_orbit.focus + rot_matrix.mul_vec3(Vec3::new(0.0, 0.0, pan_orbit.radius));
+        } else {
+            let translation_amount = 0.1;
+            // for event in keyboard_events.iter() {
+            // if event.state != ButtonState::Pressed || event.key_code.is_none() {
+            //     continue;
+            // }
+            let mut translation = Vec3::ZERO;
+            
+            if input_keyboard.any_pressed([KeyCode::W, KeyCode::Up]) {
+                translation += transform.forward() * translation_amount;
+            }
+
+            if input_keyboard.any_pressed([KeyCode::S, KeyCode::Back]) {
+                translation += transform.back() * translation_amount;
+            }
+
+            if input_keyboard.any_pressed([KeyCode::A, KeyCode::Left]) {
+                translation += transform.left() * translation_amount;
+            }
+
+            if input_keyboard.any_pressed([KeyCode::D, KeyCode::Right]) {
+                translation += transform.right() * translation_amount;
+            }
+
+            if input_keyboard.any_pressed([KeyCode::Space]) {
+                translation += transform.up() * translation_amount;
+            }
+
+            if input_keyboard.any_pressed([KeyCode::LShift]) {
+                translation += transform.down() * translation_amount;
+            }
+            transform.translation += translation;
+            pan_orbit.focus += translation; 
         }
     }
 }
