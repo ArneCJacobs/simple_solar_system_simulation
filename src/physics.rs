@@ -9,8 +9,9 @@ use std::{iter::zip, f32::consts::PI, collections::VecDeque};
 
 pub const GRAVITY_CONSTANT: f32 = 0.01;
 pub const DELTA_TIME: f64 = 0.005;
-pub const SOFTENING: f32 = 0.01;
+pub const SOFTENING: f32 = 0.10;
 
+#[allow(dead_code)]
 pub fn calculate_circular_orbit_velocity(poss: &Vector<Vec3>, masses: &Vector<f32>) -> Vector<Vec3> {
     let mut baricenter = Vec3::ZERO; 
     for pos in poss {
@@ -18,7 +19,7 @@ pub fn calculate_circular_orbit_velocity(poss: &Vector<Vec3>, masses: &Vector<f3
     }
     baricenter /= poss.len() as f32;
     let mut tau = Vector::from_elem(poss.raw_dim(), Vec3::ZERO);
-    for (index1, (pos1, mass1, mut tau1)) in izip!(poss, masses, &mut tau).enumerate() {
+    for (index1, (pos1, _mass1, tau1)) in izip!(poss, masses, &mut tau).enumerate() {
         for (index2, (pos2, mass2)) in izip!(poss, masses).enumerate() {
             if index1 == index2 {
                 continue;

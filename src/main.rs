@@ -6,7 +6,6 @@ use std::{env, fs};
 
 use bevy::prelude::*;
 use bevy::{pbr::AmbientLight, time::FixedTimestep};
-use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::egui::plot::{Line, Legend, Plot, Values};
 use bevy_inspector_egui::widgets::InspectorQuery;
 use bevy_inspector_egui::{Inspectable, InspectorPlugin};
@@ -38,7 +37,6 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(DebugLinesPlugin::with_depth_test(true))
         // .add_plugin(WorldInspectorPlugin::new())
-        .add_plugin(EguiPlugin)
         // camera
         .add_startup_system(spawn_camera)
         .add_system(set_focus_camera.before(pan_orbit_camera))
@@ -55,7 +53,7 @@ fn main() {
             brightness: 0.03,
             ..default()
         })
-        // .add_system(ui_system)
+        .add_system(ui_system)
         .add_system(draw_paths)
         .add_system(bevy::window::close_on_esc)
         .add_stage_after(
@@ -158,7 +156,10 @@ fn ui_system(
                 energy_history.pop_front();
             } 
         }
-        let plot = Plot::new("Energy history").legend(Legend::default());
+        let plot = Plot::new("Energy history")
+            // .height(150.0)
+            // .data_aspect(2./3.)
+            .legend(Legend::default());
         plot.show(ui, |plot_ui| {
             plot_ui.line(
                 get_line_from_data(

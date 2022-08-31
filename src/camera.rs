@@ -3,6 +3,7 @@ use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel,MouseMotion};
 use bevy::render::camera::Projection;
+use bevy_inspector_egui::bevy_egui::EguiContext;
 use crate::{Settings, FocusedEnity};
 use crate::physics::PointMass;
 
@@ -58,8 +59,17 @@ pub fn pan_orbit_camera(
     mut ev_scroll: EventReader<MouseWheel>,
     input_mouse: Res<Input<MouseButton>>,
     mut query: Query<(&mut PanOrbitCamera, &mut Transform, &Projection)>,
-    mut input_keyboard: Res<Input<KeyCode>>,
+    input_keyboard: Res<Input<KeyCode>>,
+    egui_context_opt: Option<ResMut<EguiContext>>, // egui context added by bevy_egui
 ) {
+
+    let hovering_over_egui = match egui_context_opt {
+        Some(mut egui_context) => egui_context.ctx_mut().is_pointer_over_area(),
+        None => false,
+    };
+    if hovering_over_egui {
+        return;
+    }
     // change input mapping for orbit and panning here
     let orbit_button = MouseButton::Right;
     let pan_button = MouseButton::Middle;
