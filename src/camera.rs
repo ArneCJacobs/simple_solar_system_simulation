@@ -2,11 +2,8 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseWheel,MouseMotion};
 use bevy::render::camera::Projection;
 use bevy_inspector_egui::bevy_egui::EguiContext;
-use bevy_transform_gizmo::InternalGizmoCamera;
 use crate::FocusedEnity;
 use crate::physics::PointMass;
-
-
 
 #[derive(Component)]
 pub struct MainCamera;
@@ -38,7 +35,7 @@ pub fn set_focus_camera(
 ) {
     // let star = star.single();
     if let Some(star) = focused_entity.0 {
-        let star_pos = stars.get(star.into()).unwrap();
+        let star_pos = stars.get(star).unwrap();
         let mut camera = camera_query.get_single_mut().unwrap();
         camera.focus = star_pos.translation;
     }
@@ -118,7 +115,7 @@ pub fn pan_orbit_camera(
             let yaw = Quat::from_rotation_y(-delta_x);
             let pitch = Quat::from_rotation_x(-delta_y);
             transform.rotation = yaw * transform.rotation; // rotate around global y axis
-            transform.rotation = transform.rotation * pitch; // rotate around local x axis
+            transform.rotation *= pitch; // rotate around local x axis
         } else if pan.length_squared() > 0.0 {
             any = true;
             // make panning distance independent of resolution and FOV,
@@ -184,8 +181,7 @@ pub fn pan_orbit_camera(
 
 pub fn get_primary_window_size(windows: &Res<Windows>) -> Vec2 {
     let window = windows.get_primary().unwrap();
-    let window = Vec2::new(window.width() as f32, window.height() as f32);
-    window
+    Vec2::new(window.width() as f32, window.height() as f32)
 }
 
 /// Spawn a camera like this
@@ -208,20 +204,4 @@ pub fn spawn_camera(mut commands: Commands) {
         .insert_bundle(bevy_mod_picking::PickingCameraBundle::default())
         .insert(bevy_transform_gizmo::GizmoPickSource::default())
         .insert(MainCamera);
-}
-
-pub fn test(
-    mut commands: Commands,
-    mut query_what: Query<(Entity, &InternalGizmoCamera), (With<Camera>, Without<MainCamera>)>,
-    mut query: Query<Entity, (With<Camera>, With<MainCamera>)>
-) {
-    // if query_what.is_empty() {
-    //     return;
-    // }
-    // let (camera_wierd, comp) = query_what.get_single_mut().unwrap(); 
-    // let mut camera = query.get_single_mut().unwrap();
-    // commands.entity(camera).insert(comp.clone());
-    // commands.entity(camera_wierd).despawn();
-    // println!("{:?}", camera);
-    // println!("{:?}", camera_wierd);
 }

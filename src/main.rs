@@ -18,6 +18,7 @@ use star_config::StarConfig;
 mod star_config;
 mod physics;
 mod camera;
+mod integration;
 
 use camera::{set_focus_camera, pan_orbit_camera};
 
@@ -42,7 +43,6 @@ fn main() {
         .add_startup_system(camera::spawn_camera)
         .add_system(set_focus_camera.before(pan_orbit_camera))
         .add_system(pan_orbit_camera)
-        .add_system(camera::test)
         .add_plugin(InspectorPlugin::<StarConfig>::new())
         .add_plugin(InspectorPlugin::<Settings>::new())
         .register_type::<PointMass>()
@@ -107,6 +107,7 @@ impl Default for Settings {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn ui_system(
     mut egui_context: ResMut<EguiContext>, 
     new_planet: ResMut<StarConfig>,
@@ -258,10 +259,10 @@ fn draw_paths(
     focused_entity: Res<FocusedEnity>,
 ) {
     if let Some(centered_star_entity) = focused_entity.0 {
-        let (_, center_path, center_transform) = query.get(centered_star_entity.into()).unwrap();
+        let (_, center_path, center_transform) = query.get(centered_star_entity).unwrap();
 
         for (entity, path, _) in &query {
-            if entity == centered_star_entity.into() {
+            if entity == centered_star_entity {
                 continue;
             }
             for i in 1..path.pos_vec.len() {
