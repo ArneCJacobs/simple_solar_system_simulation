@@ -23,3 +23,4 @@ cargo run circle.json
 - [ ] implement Chin-Chen 4A, 4B' and 4C family of integration methods
   - [Forward Symplectic Integrators for Solving Gravitational Few-Body Problems](https://www.researchgate.net/publication/1931127_Forward_Symplectic_Integrators_for_Solving_Gravitational_Few-Body_Problems)
     - Equation 28 
+- [ ] give them all names and stuff
