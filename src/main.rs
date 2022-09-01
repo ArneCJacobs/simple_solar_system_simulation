@@ -167,21 +167,21 @@ fn ui_system(
             plot_ui.line(
                 get_line_from_data(
                     energy_history.iter().map(|p| p.0).collect::<Vec<f32>>().as_slice(), 
-                    "KE"
+                    "Kenetic Energy"
                 )
             );
 
             plot_ui.line(
                 get_line_from_data(
                     energy_history.iter().map(|p| p.1).collect::<Vec<f32>>().as_slice(), 
-                    "PE"
+                    "Potential Energy"
                 )
             );
 
             plot_ui.line(
                 get_line_from_data(
                     energy_history.iter().map(|p| p.2).collect::<Vec<f32>>().as_slice(), 
-                    "TE"
+                    "Total Energy"
                 )
             );
         });
