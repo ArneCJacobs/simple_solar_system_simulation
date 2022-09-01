@@ -1,5 +1,5 @@
 # Simple n-body simulation 
-![Example](./images/Peek 2.gif)
+![Example](./images/example.gif)
 
 ## Movement
 W/A/S/D => Forward/Left/Back/Right
